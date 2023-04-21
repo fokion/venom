@@ -238,6 +238,7 @@ func (v *Venom) RunUserExecutor(ctx context.Context, runner ExecutorRunner, tcIn
 
 	tc.originalName = tc.Name
 	tc.Name = slug.Make(tc.Name)
+
 	tc.Vars.Add("venom.testcase", tc.Name)
 	tc.Vars.Add("venom.executor.filename", ux.Filename)
 	tc.Vars.Add("venom.executor.name", ux.Executor)
@@ -264,7 +265,7 @@ func (v *Venom) RunUserExecutor(ctx context.Context, runner ExecutorRunner, tcIn
 		return nil, err
 	}
 
-	// the value of each var can contains a double-quote -> "
+	// the value of each var can contain a double-quote -> "
 	// if the value is not escaped, it will be used as is, and the json sent to unmarshall will be incorrect.
 	// This also avoids injections into the json structure of a user executor
 	for i := range computedVars {
@@ -292,7 +293,7 @@ func (v *Venom) RunUserExecutor(ctx context.Context, runner ExecutorRunner, tcIn
 	// here, we have the user executor results.
 	// and for each key in output, we try to add the json version
 	// this will allow user to use json version of output (map, etc...)
-	// because, it's not possible to to that:
+	// because, it's not possible to that:
 	// output:
 	//   therawout: {{.result.systemout}}
 	//

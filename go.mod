@@ -1,6 +1,6 @@
 module github.com/ovh/venom
 
-go 1.20
+go 1.19
 
 require (
 	github.com/Azure/go-amqp v0.18.1
@@ -25,7 +25,7 @@ require (
 	github.com/lib/pq v1.10.7
 	github.com/linkedin/goavro/v2 v2.12.0
 	github.com/mattn/go-shellwords v1.0.12
-	github.com/mattn/go-sqlite3 v2.0.3+incompatible
+	github.com/mattn/go-sqlite3 v1.14.16
 	github.com/mattn/go-zglob v0.0.4
 	github.com/mitchellh/go-homedir v1.1.0
 	github.com/mitchellh/mapstructure v1.5.0
