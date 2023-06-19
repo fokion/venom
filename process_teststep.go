@@ -113,7 +113,7 @@ func (v *Venom) RunTestStep(ctx context.Context, e ExecutorRunner, tc *TestCase,
 		if assertRes.OK {
 			break
 		}
-		failures, err := testConditionalStatement(ctx, tc, e.RetryIf(), tc.computedVars, "")
+		failures, err := testConditionalStatement(ctx, tc, e.RetryIf(), AllVarsFromCtx(ctx), "")
 		if err != nil {
 			tsResult.appendError(fmt.Errorf("Error while evaluating retry condition: %v", err))
 			break
