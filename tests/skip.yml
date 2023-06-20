@@ -12,14 +12,14 @@ testcases:
     - result.systemout ShouldContainSubstring bar
 
 - name: do-not-skip-this
-  skip: 
+  skip:
   - foo ShouldNotBeEmpty
   steps:
   - type: exec
     script: exit 0
 
 - name: skip-this
-  skip: 
+  skip:
     - foo ShouldBeEmpty
   steps:
   - type: exec
@@ -53,3 +53,14 @@ testcases:
     - result.code ShouldEqual 0
     skip:
     - foo ShouldBeEmpty
+- name : skip-one-step
+  steps:
+    - name : do-not-skip-this
+      script : "echo 'false'"
+      vars:
+        falsy:
+          from : result.systemoutjson
+    - name: skip-as-it-is-false
+      skip:
+        - falsy ShouldEqual "true"
+      script : "exit 1"
