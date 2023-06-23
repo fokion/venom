@@ -444,7 +444,7 @@ func parseSkip(ctx context.Context, tc *TestCase, ts *TestStepResult, rawStep []
 			Error(ctx, "unable to evaluate \"skip\" assertions: %v", err)
 			return false, err
 		}
-		if len(failures) == 0 {
+		if len(failures) > 0 {
 			for _, s := range failures {
 				ts.Skipped = append(ts.Skipped, Skipped{Value: s})
 				Warn(ctx, s)
