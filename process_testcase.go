@@ -141,11 +141,6 @@ func (v *Venom) runTestCase(ctx context.Context, ts *TestSuite, tc *TestCase) {
 	tc.computedVars = H{}
 
 	Info(ctx, "Starting testcase")
-
-	for k, v := range tc.Vars {
-		Debug(ctx, "Running testcase with variable %s: %+v", k, v)
-	}
-
 	defer Info(ctx, "Ending testcase")
 	// ##### RUN Test Steps Here
 	v.runTestSteps(ctx, tc, nil)
@@ -276,7 +271,6 @@ func (v *Venom) runTestSteps(ctx context.Context, tc *TestCase, tsIn *TestStepRe
 
 			tc.testSteps = append(tc.testSteps, step)
 			var e ExecutorRunner
-			Info(ctx, "variables before execution %v", stepVars)
 			ctx, e, err = v.GetExecutorRunner(ctx, step, stepVars)
 			if err != nil {
 				tsResult.appendError(err)

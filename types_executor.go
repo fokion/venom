@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	log "github.com/sirupsen/logrus"
 	"reflect"
 	"strings"
 
@@ -77,6 +78,7 @@ func (e executor) Info() []string {
 }
 
 func (e executor) GetExecutor() Executor {
+	log.Debugf("types executor %v", e.Executor)
 	return e.Executor
 }
 
@@ -132,7 +134,7 @@ func (e executor) Run(ctx context.Context, step TestStep) (interface{}, error) {
 }
 
 func newExecutorRunner(e Executor, name, stype string, retry int, retryIf []string, delay, timeout int, info []string) ExecutorRunner {
-	return &executor{
+	anE := &executor{
 		Executor: e,
 		name:     name,
 		retry:    retry,
@@ -142,6 +144,9 @@ func newExecutorRunner(e Executor, name, stype string, retry int, retryIf []stri
 		info:     info,
 		stype:    stype,
 	}
+	log.Debugf("types executor %v", anE.Executor)
+	log.Debugf("%v", anE)
+	return anE
 }
 
 // executorWithDefaultAssertions execute a testStep.
@@ -264,7 +269,7 @@ func (v *Venom) RunUserExecutor(ctx context.Context, runner ExecutorRunner, tcIn
 		return nil, err
 	}
 
-	// the value of each var can contains a double-quote -> "
+	// the value of each var can contain a double-quote -> \"
 	// if the value is not escaped, it will be used as is, and the json sent to unmarshall will be incorrect.
 	// This also avoids injections into the json structure of a user executor
 	for i := range computedVars {
@@ -292,7 +297,7 @@ func (v *Venom) RunUserExecutor(ctx context.Context, runner ExecutorRunner, tcIn
 	// here, we have the user executor results.
 	// and for each key in output, we try to add the json version
 	// this will allow user to use json version of output (map, etc...)
-	// because, it's not possible to to that:
+	// because, it's not possible to do that:
 	// output:
 	//   therawout: {{.result.systemout}}
 	//
