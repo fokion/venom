@@ -5,14 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
-	"os"
-	"path"
-	"path/filepath"
-	"plugin"
-	"sort"
-	"strings"
-
 	"github.com/confluentinc/bincover"
 	"github.com/fatih/color"
 	"github.com/ovh/cds/sdk/interpolate"
@@ -20,6 +12,13 @@ import (
 	"github.com/rockbears/yaml"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cast"
+	"io"
+	"os"
+	"path"
+	"path/filepath"
+	"plugin"
+	"sort"
+	"strings"
 )
 
 var (
@@ -34,6 +33,10 @@ func OSExit(exitCode int) {
 	} else {
 		os.Exit(exitCode)
 	}
+}
+
+func (v *Venom) Exit(exitCode int) {
+	OSExit(exitCode)
 }
 
 // ContextKey can be added in context to store contextual infos. Also used by logger.
@@ -63,8 +66,9 @@ type Venom struct {
 	executorsUser     map[string]Executor
 	executorFileCache map[string][]byte
 
-	Tests     Tests
-	variables H
+	Tests            Tests
+	variables        map[string]interface{}
+	InitialVariables *map[string]string
 
 	LibDir        string
 	OutputFormat  string
@@ -115,7 +119,7 @@ func (v *Venom) RegisterExecutorUser(name string, e Executor) {
 
 // GetExecutorRunner initializes a test by name
 // no type -> exec is default
-func (v *Venom) GetExecutorRunner(ctx context.Context, ts TestStep, h H) (context.Context, ExecutorRunner, error) {
+func (v *Venom) GetExecutorRunner(ctx context.Context, ts *TestStep, h *H) (context.Context, ExecutorRunner, error) {
 	name, _ := ts.StringValue("type")
 	script, _ := ts.StringValue("script")
 	if name == "" && script != "" {
@@ -139,7 +143,7 @@ func (v *Venom) GetExecutorRunner(ctx context.Context, ts TestStep, h H) (contex
 	}
 
 	info, _ := ts.StringSliceValue("info")
-	vars, err := DumpStringPreserveCase(h)
+	vars, err := DumpStringPreserveCase(*h)
 	if err != nil {
 		return ctx, nil, err
 	}

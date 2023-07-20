@@ -88,7 +88,7 @@ func (v *Venom) Parse(ctx context.Context, path []string) error {
 		ts.Vars.Add("venom.testsuite", ts.Name)
 
 		Info(ctx, "Parsing testsuite %s : %+v", ts.Filepath, ts.Vars)
-		tvars, textractedVars, err := v.parseTestSuite(ts)
+		tvars, textractedVars, err := v.parseTestCases(ctx, ts)
 		if err != nil {
 			return err
 		}
@@ -123,10 +123,7 @@ func (v *Venom) Parse(ctx context.Context, path []string) error {
 		}
 	}
 
-	vars, err := DumpStringPreserveCase(v.variables)
-	if err != nil {
-		return errors.Wrapf(err, "unable to parse variables")
-	}
+	vars := *v.InitialVariables
 
 	reallyMissingVars := []string{}
 	for _, k := range missingVars {
@@ -164,41 +161,43 @@ func (v *Venom) Parse(ctx context.Context, path []string) error {
 }
 
 // Process runs tests suite and return a Tests result
-func (v *Venom) Process(ctx context.Context, path []string) error {
+func (v *Venom) Process(ctx context.Context) error {
 	v.Tests.Status = StatusRun
 	v.Tests.Start = time.Now()
 	Debug(ctx, "nb testsuites: %d", len(v.Tests.TestSuites))
-	for i := range v.Tests.TestSuites {
-
-		v.Tests.TestSuites[i].Start = time.Now()
+	testsSize := len(v.Tests.TestSuites)
+	var ts TestSuite
+	nSkip := 0
+	//initialVariables, err := DumpStringPreserveCase(v.InitialVariables)
+	//if err != nil {
+	//	return err
+	//}
+	for i := 0; i < testsSize; i++ {
+		ts, v.Tests.TestSuites = v.Tests.TestSuites[0], v.Tests.TestSuites[1:]
+		ts.Start = time.Now()
 		// ##### RUN Test Suite Here
-		v.runTestSuite(ctx, &v.Tests.TestSuites[i])
-
-		v.Tests.TestSuites[i].End = time.Now()
-		v.Tests.TestSuites[i].Duration = v.Tests.TestSuites[i].End.Sub(v.Tests.TestSuites[i].Start).Seconds()
+		if err := v.runTestSuite(ctx, &ts); err != nil {
+			v.Tests.Status = StatusFail
+			if v.StopOnFailure {
+				v.Tests.NbTestsuitesSkip = testsSize - i
+				v.Tests.End = time.Now()
+				return err
+			}
+		}
+		if ts.Status == StatusFail {
+			v.Tests.Status = StatusFail
+			break
+		} else if ts.Status == StatusSkip {
+			nSkip++
+			if nSkip == testsSize {
+				v.Tests.Status = StatusSkip
+			}
+		} else {
+			v.Tests.Status = StatusPass
+		}
 	}
 	v.Tests.End = time.Now()
 	v.Tests.Duration = v.Tests.End.Sub(v.Tests.Start).Seconds()
-
-	var isFailed bool
-	var nSkip int
-	for i := range v.Tests.TestSuites {
-		if v.Tests.TestSuites[i].Status == StatusFail {
-			isFailed = true
-			break
-		} else if v.Tests.TestSuites[i].Status == StatusSkip {
-			nSkip++
-		}
-	}
-	if isFailed {
-		v.Tests.Status = StatusFail
-	} else if nSkip > 0 && nSkip == len(v.Tests.TestSuites) {
-		v.Tests.Status = StatusSkip
-	} else {
-		v.Tests.Status = StatusPass
-	}
-
 	Debug(ctx, "final status: %s", v.Tests.Status)
-
 	return nil
 }

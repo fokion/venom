@@ -112,15 +112,15 @@ type TestSuiteInput struct {
 type TestSuite struct {
 	Name      string     `json:"name" yaml:"name"`
 	TestCases []TestCase `json:"testcases" yaml:"testcases"`
-	Vars      H          `json:"vars" yaml:"vars"`
+	Vars      H          `json:"variables" yaml:"variables"`
 
 	// computed
-	ShortName    string `json:"shortname" yaml:"-"`
-	Filename     string `json:"filename" yaml:"-"`
-	Filepath     string `json:"filepath" yaml:"-"`
-	ComputedVars H      `json:"computed_vars" yaml:"-"`
-	WorkDir      string `json:"workdir" yaml:"_"`
-	Status       Status `json:"status" yaml:"status"`
+	ShortName string `json:"shortname" yaml:"-"`
+	Filename  string `json:"filename" yaml:"-"`
+	Filepath  string `json:"filepath" yaml:"-"`
+
+	WorkDir string `json:"workdir" yaml:"_"`
+	Status  Status `json:"status" yaml:"status"`
 
 	Duration float64   `json:"duration" yaml:"-"`
 	Start    time.Time `json:"start" yaml:"-"`
@@ -146,7 +146,6 @@ type TestCaseXML struct {
 
 type TestCaseInput struct {
 	Name         string            `json:"name" yaml:"name"`
-	Vars         H                 `json:"vars" yaml:"vars"`
 	Skip         []string          `json:"skip" yaml:"skip"`
 	RawTestSteps []json.RawMessage `json:"steps" yaml:"steps"`
 }
@@ -165,9 +164,7 @@ type TestCase struct {
 
 	testSteps       []TestStep       `json:"-" yaml:"-"`
 	TestStepResults []TestStepResult `json:"results" yaml:"-"`
-	TestSuiteVars   H                `json:"-" yaml:"-"`
 
-	computedVars    H        `json:"-" yaml:"-"`
 	computedInfo    []string `json:"-" yaml:"-"`
 	computedVerbose []string `json:"-" yaml:"-"`
 	IsExecutor      bool     `json:"-" yaml:"-"`

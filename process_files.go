@@ -74,8 +74,6 @@ func (v *Venom) readFiles(ctx context.Context, filesPath []string) (err error) {
 			return errors.Wrapf(err, "unable to read file %q", filePath)
 		}
 
-		varCloned := v.variables.Clone()
-
 		fromPartial, err := getVarFromPartialYML(ctx, btes)
 		if err != nil {
 			return errors.Wrapf(err, "unable to get vars from file %q", filePath)
@@ -89,24 +87,29 @@ func (v *Venom) readFiles(ctx context.Context, filesPath []string) (err error) {
 			}
 		}
 
+		initialVariables := H{}
+		for k, value := range *v.InitialVariables {
+			initialVariables.Add(k, value)
+		}
+
 		// we take default vars from the testsuite, only if it's not already is global vars
 		for k, value := range varsFromPartial {
 			if k == "" {
 				continue
 			}
-			if _, ok := varCloned[k]; !ok || (varCloned[k] == "{}" && varCloned["__Len__"] == "0") {
+			if _, ok := initialVariables[k]; !ok || (initialVariables[k] == "{}" && initialVariables["__Len__"] == "0") {
 				// we interpolate the value of vars here, to do it only once per ts
 				valueInterpolated, err := interpolate.Do(value, varsFromPartial)
 				if err != nil {
 					return errors.Wrapf(err, "unable to parse variable %q", k)
 				}
-				varCloned.Add(k, valueInterpolated)
+				varsFromPartial[k] = valueInterpolated
 			}
 		}
 
 		var vars map[string]string
-		if len(varCloned) > 0 {
-			vars, err = DumpStringPreserveCase(varCloned)
+		if len(initialVariables) > 0 {
+			vars, err = DumpStringPreserveCase(initialVariables)
 			if err != nil {
 				return errors.Wrapf(err, "unable to parse variables")
 			}
@@ -146,7 +149,6 @@ func (v *Venom) readFiles(ctx context.Context, filesPath []string) (err error) {
 		ts.ShortName = strings.TrimSuffix(filepath.Base(filePath), filepath.Ext(filePath))
 		// a.yml
 		ts.Filename = filepath.Base(filePath)
-		ts.Vars = varCloned
 
 		ts.Vars.Add("venom.testsuite.workdir", ts.WorkDir)
 		ts.Vars.Add("venom.testsuite.name", ts.Name)

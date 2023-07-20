@@ -11,8 +11,8 @@ import (
 	"strings"
 
 	"github.com/mitchellh/go-homedir"
+	"github.com/pkg/errors"
 	"github.com/rockbears/yaml"
-	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
@@ -22,9 +22,8 @@ import (
 )
 
 var (
-	path []string
-	v    *venom.Venom
-
+	path          []string
+	v             *venom.Venom
 	variables     []string
 	format        string = "xml" // Set the default value for formatFlag
 	varFiles      []string
@@ -60,12 +59,12 @@ func initArgs(cmd *cobra.Command) {
 	// Configuration file overrides the environment variables.
 	if _, err := initFromEnv(os.Environ()); err != nil {
 		fmt.Fprintf(os.Stderr, "%v\n", err)
-		venom.OSExit(2)
+		v.Exit(2)
 	}
 
 	if err := initFromConfigFile(); err != nil {
 		fmt.Fprintf(os.Stderr, "%v\n", err)
-		venom.OSExit(2)
+		v.Exit(2)
 	}
 	cmd.LocalFlags().VisitAll(initFromCommandArguments)
 }
@@ -164,12 +163,13 @@ type ConfigFileData struct {
 // Configuration file overrides the environment variables.
 func initFromReaderConfigFile(reader io.Reader) error {
 	btes, err := io.ReadAll(reader)
-	if err != nil {
+
+	if err != nil && err != io.EOF {
 		return err
 	}
 
 	var configFileData ConfigFileData
-	if err := yaml.Unmarshal(btes, &configFileData); err != nil {
+	if err := yaml.Unmarshal(btes, &configFileData); err != nil && err != io.EOF {
 		return err
 	}
 
@@ -296,7 +296,6 @@ func displayArg(ctx context.Context) {
 	venom.Debug(ctx, "option outputDir=%v", outputDir)
 	venom.Debug(ctx, "option stopOnFailure=%v", stopOnFailure)
 	venom.Debug(ctx, "option htmlReport=%v", htmlReport)
-	venom.Debug(ctx, "option variables=%v", strings.Join(variables, " "))
 	venom.Debug(ctx, "option varFiles=%v", strings.Join(varFiles, " "))
 	venom.Debug(ctx, "option verbose=%v", verbose)
 }
@@ -347,16 +346,23 @@ var Cmd = &cobra.Command{
 		if v.Verbose == 3 {
 			fCPU, err := os.Create(filepath.Join(v.OutputDir, "pprof_cpu_profile.prof"))
 			if err != nil {
-				log.Errorf("error while create profile file %v", err)
+				fmt.Fprintf(os.Stderr, "error while create profile file %v\n", err)
+				venom.OSExit(2)
 			}
 			fMem, err := os.Create(filepath.Join(v.OutputDir, "pprof_mem_profile.prof"))
 			if err != nil {
-				log.Errorf("error while create profile file %v", err)
+				fmt.Fprintf(os.Stderr, "error while creating profile file %v\n", err)
+				venom.OSExit(2)
 			}
 			if fCPU != nil && fMem != nil {
 				pprof.StartCPUProfile(fCPU) //nolint
 				p := pprof.Lookup("heap")
-				defer p.WriteTo(fMem, 1) //nolint
+				defer func(p *pprof.Profile, w io.Writer, debug int) {
+					err := p.WriteTo(w, debug)
+					if err != nil {
+						fmt.Fprintf(os.Stderr, "error while writing profile file %v\n", err)
+					}
+				}(p, fMem, 1) //nolint
 				defer pprof.StopCPUProfile()
 			}
 		}
@@ -364,32 +370,44 @@ var Cmd = &cobra.Command{
 			displayArg(context.Background())
 		}
 
-		var readers = []io.Reader{}
-		for _, f := range varFiles {
-			if f == "" {
-				continue
-			}
-			fi, err := os.Open(f)
-			if err != nil {
-				return fmt.Errorf("unable to open var-from-file %s: %v", f, err)
-			}
-			defer fi.Close()
-			readers = append(readers, fi)
-		}
-
-		mapvars, err := readInitialVariables(context.Background(), variables, readers, os.Environ())
+		mapvars, err := readInitialVariables(context.Background(), variables, varFiles, os.Environ())
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "%v\n", err)
-			venom.OSExit(2)
+			v.Exit(2)
 		}
-		v.AddVariables(mapvars)
+		varsForInterpolation, err := venom.DumpStringPreserveCase(mapvars)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "%v\n", err)
+			v.Exit(2)
+		}
 
+		for k, value := range mapvars {
+			computedV, err := interpolate.Do(fmt.Sprintf("%v", value), varsForInterpolation)
+			if err != nil {
+				return errors.Wrapf(err, "error while computing variable %s=%q", k, value)
+			}
+
+			varsForInterpolation[k] = computedV
+		}
+
+		exePath, err := os.Executable()
+		if err != nil {
+			return errors.Wrapf(err, "failed to get executable path")
+		} else {
+			varsForInterpolation["venom.executable"] = exePath
+		}
+
+		varsForInterpolation["venom.outputdir"] = v.OutputDir
+		varsForInterpolation["venom.libdir"] = v.LibDir
+		v.InitialVariables = &varsForInterpolation
+		//v.AddVariables(mapvars)
 		if err := v.Parse(context.Background(), path); err != nil {
 			fmt.Fprintf(os.Stderr, "%v\n", err)
-			venom.OSExit(2)
+
+			v.Exit(2)
 		}
 
-		if err := v.Process(context.Background(), path); err != nil {
+		if err := v.Process(context.Background()); err != nil {
 			fmt.Fprintf(os.Stderr, "%v\n", err)
 			venom.OSExit(2)
 		}
@@ -410,7 +428,7 @@ var Cmd = &cobra.Command{
 	},
 }
 
-func readInitialVariables(ctx context.Context, argsVars []string, argVarsFiles []io.Reader, environ []string) (map[string]interface{}, error) {
+func readInitialVariables(ctx context.Context, argsVars []string, argVarsFiles []string, environ []string) (map[string]interface{}, error) {
 	var cast = func(vS string) interface{} {
 		var v interface{}
 		_ = yaml.Unmarshal([]byte(vS), &v) //nolint
@@ -421,7 +439,7 @@ func readInitialVariables(ctx context.Context, argsVars []string, argVarsFiles [
 
 	for _, r := range argVarsFiles {
 		var tmpResult = map[string]interface{}{}
-		btes, err := io.ReadAll(r)
+		btes, err := os.ReadFile(r)
 		if err != nil {
 			return nil, err
 		}

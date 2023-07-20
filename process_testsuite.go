@@ -2,59 +2,13 @@ package venom
 
 import (
 	"context"
-	"fmt"
-	"os"
-	"runtime/pprof"
-	"time"
-
 	"github.com/gosimple/slug"
-	"github.com/ovh/cds/sdk/interpolate"
-	log "github.com/sirupsen/logrus"
+	"time"
 )
 
-func (v *Venom) runTestSuite(ctx context.Context, ts *TestSuite) {
-	if v.Verbose == 3 {
-		var filename, filenameCPU, filenameMem string
-		if v.OutputDir != "" {
-			filename = v.OutputDir + "/"
-		}
-		filenameCPU = filename + "pprof_cpu_profile_" + ts.Filename + ".prof"
-		filenameMem = filename + "pprof_mem_profile_" + ts.Filename + ".prof"
-		fCPU, errCPU := os.Create(filenameCPU)
-		fMem, errMem := os.Create(filenameMem)
-		if errCPU != nil || errMem != nil {
-			log.Errorf("error while create profile file CPU:%v MEM:%v", errCPU, errMem)
-		} else {
-			pprof.StartCPUProfile(fCPU)
-			p := pprof.Lookup("heap")
-			defer p.WriteTo(fMem, 1)
-			defer pprof.StopCPUProfile()
-		}
-	}
+func (v *Venom) runTestSuite(ctx context.Context, ts *TestSuite) error {
 
-	// Intialiaze the testsuite variables and compute a first interpolation over them
-	ts.Vars.AddAll(v.variables.Clone())
-	vars, _ := DumpStringPreserveCase(ts.Vars)
-	for k, v := range vars {
-		computedV, err := interpolate.Do(fmt.Sprintf("%v", v), vars)
-		if err != nil {
-			log.Errorf("error while computing variable %s=%q: %v", k, v, err)
-		}
-		ts.Vars.Add(k, computedV)
-	}
-
-	exePath, err := os.Executable()
-	if err != nil {
-		log.Errorf("failed to get executable path: %v", err)
-	} else {
-		ts.Vars.Add("venom.executable", exePath)
-	}
-
-	ts.Vars.Add("venom.outputdir", v.OutputDir)
-	ts.Vars.Add("venom.libdir", v.LibDir)
-	ts.Vars.Add("venom.testsuite", ts.Name)
-	ts.ComputedVars = H{}
-
+	// Initialize the testsuite variables and compute a first interpolation over them
 	ctx = context.WithValue(ctx, ContextKey("testsuite"), ts.Name)
 	Info(ctx, "Starting testsuite")
 	defer Info(ctx, "Ending testsuite")
@@ -65,10 +19,16 @@ func (v *Venom) runTestSuite(ctx context.Context, ts *TestSuite) {
 	}
 
 	ts.Status = StatusRun
-
+	initialVariables := H{}
+	initialVariables.AddAll(ts.Vars)
+	for k, value := range *v.InitialVariables {
+		initialVariables.Add(k, value)
+	}
 	// ##### RUN Test Cases Here
-	v.runTestCases(ctx, ts)
-
+	v.runTestCases(ctx, ts, &initialVariables)
+	//## Calculate the time here
+	ts.End = time.Now()
+	ts.Duration = ts.End.Sub(ts.Start).Seconds()
 	var isFailed bool
 	var nSkip int
 	for _, tc := range ts.TestCases {
@@ -93,13 +53,20 @@ func (v *Venom) runTestSuite(ctx context.Context, ts *TestSuite) {
 		ts.Status = StatusPass
 		v.Tests.NbTestsuitesPass++
 	}
+	//##export report
+	err := v.GenerateOutputForTestSuite(ts)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
-func (v *Venom) runTestCases(ctx context.Context, ts *TestSuite) {
+func (v *Venom) runTestCases(ctx context.Context, ts *TestSuite, variables *H) {
 	verboseReport := v.Verbose >= 1
 
 	v.Println(" • %s (%s)", ts.Name, ts.Filepath)
-
+	previousVariables := H{}
+	previousVariables.AddAll(*variables)
 	for i := range ts.TestCases {
 		tc := &ts.TestCases[i]
 		tc.IsEvaluated = true
@@ -115,7 +82,8 @@ func (v *Venom) runTestCases(ctx context.Context, ts *TestSuite) {
 				v.Print("\n")
 			}
 			// ##### RUN Test Case Here
-			v.runTestCase(ctx, ts, tc)
+			computedVariables := v.runTestCase(ctx, tc, &previousVariables)
+			previousVariables.AddAllWithPrefix(tc.Name, computedVariables)
 			tc.End = time.Now()
 			tc.Duration = tc.End.Sub(tc.Start).Seconds()
 		}
@@ -180,28 +148,24 @@ func (v *Venom) runTestCases(ctx context.Context, ts *TestSuite) {
 				}
 			}
 		}
-		ts.ComputedVars.AddAllWithPrefix(tc.Name, tc.computedVars)
-	}
-}
 
-// Parse the suite to find unreplaced and extracted variables
-func (v *Venom) parseTestSuite(ts *TestSuite) ([]string, []string, error) {
-	return v.parseTestCases(ts)
+	}
+
 }
 
 // Parse the testscases to find unreplaced and extracted variables
-func (v *Venom) parseTestCases(ts *TestSuite) ([]string, []string, error) {
+func (v *Venom) parseTestCases(ctx context.Context, ts *TestSuite) ([]string, []string, error) {
 	var vars []string
 	var extractsVars []string
+
 	for i := range ts.TestCases {
 		tc := &ts.TestCases[i]
 		tc.originalName = tc.Name
 		tc.Name = slug.Make(tc.Name)
-		tc.Vars = ts.Vars.Clone()
-		tc.Vars.Add("venom.testcase", tc.Name)
+		Info(ctx, "Parsing testcase %s ", tc.Name)
 
 		if len(tc.Skipped) == 0 {
-			tvars, tExtractedVars, err := v.parseTestCase(ts, tc)
+			tvars, tExtractedVars, err := v.parseTestCase(ctx, tc)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -231,6 +195,6 @@ func (v *Venom) parseTestCases(ts *TestSuite) ([]string, []string, error) {
 			}
 		}
 	}
-
+	Info(ctx, "extracted vars from testcase %s ", extractsVars)
 	return vars, extractsVars, nil
 }

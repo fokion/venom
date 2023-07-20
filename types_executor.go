@@ -200,8 +200,9 @@ func (ux UserExecutor) ZeroValueResult() interface{} {
 	return result
 }
 
-func (v *Venom) RunUserExecutor(ctx context.Context, runner ExecutorRunner, tcIn *TestCase, tsIn *TestStepResult, step TestStep) (interface{}, error) {
-	vrs := tcIn.TestSuiteVars.Clone()
+func (v *Venom) RunUserExecutor(ctx context.Context, runner ExecutorRunner, tcIn *TestCase, tsIn *TestStepResult, step TestStep, vars *H) (interface{}, error) {
+	vrs := H{}
+	vrs.AddAll(*vars)
 	uxIn := runner.GetExecutor().(UserExecutor)
 
 	for k, va := range uxIn.Input {
@@ -219,36 +220,33 @@ func (v *Venom) RunUserExecutor(ctx context.Context, runner ExecutorRunner, tcIn
 		}
 	}
 	// reload the user executor with the interpolated vars
-	_, exe, err := v.GetExecutorRunner(ctx, step, vrs)
+	_, exe, err := v.GetExecutorRunner(ctx, &step, &vrs)
 	if err != nil {
 		return nil, errors.Wrapf(err, "unable to reload executor")
 	}
 	ux := exe.GetExecutor().(UserExecutor)
-
+	testStepResult := &TestStepResult{}
 	tc := &TestCase{
 		TestCaseInput: TestCaseInput{
 			Name:         ux.Executor,
 			RawTestSteps: ux.RawTestSteps,
-			Vars:         vrs,
 		},
-		TestSuiteVars:   tcIn.TestSuiteVars,
 		IsExecutor:      true,
-		TestStepResults: make([]TestStepResult, 0),
+		TestStepResults: []TestStepResult{},
 	}
 
 	tc.originalName = tc.Name
 	tc.Name = slug.Make(tc.Name)
-	tc.Vars.Add("venom.testcase", tc.Name)
-	tc.Vars.Add("venom.executor.filename", ux.Filename)
-	tc.Vars.Add("venom.executor.name", ux.Executor)
-	tc.computedVars = H{}
+
+	vrs.Add("venom.executor.filename", ux.Filename)
+	vrs.Add("venom.executor.name", ux.Executor)
 
 	Debug(ctx, "running user executor %v", tc.Name)
-	Debug(ctx, "with vars: %v", vrs)
 
-	v.runTestSteps(ctx, tc, tsIn)
+	v.runTestSteps(ctx, tc, &vrs, testStepResult)
+	tc.TestStepResults = []TestStepResult{*testStepResult}
 
-	computedVars, err := DumpString(tc.computedVars)
+	computedVars, err := DumpString(testStepResult.ComputedVars)
 	if err != nil {
 		return nil, errors.Wrapf(err, "unable to dump testcase computedVars")
 	}
@@ -333,5 +331,6 @@ func (v *Venom) RunUserExecutor(ctx context.Context, runner ExecutorRunner, tcIn
 			}
 		}
 	}
+
 	return result, nil
 }
