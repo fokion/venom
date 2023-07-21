@@ -242,11 +242,13 @@ func (v *Venom) RunUserExecutor(ctx context.Context, runner ExecutorRunner, tcIn
 	vrs.Add("venom.executor.name", ux.Executor)
 
 	Debug(ctx, "running user executor %v", tc.Name)
-
-	v.runTestSteps(ctx, tc, &vrs, testStepResult)
+	testStepResult.ComputedVars = H{}
+	newVars := v.runTestSteps(ctx, tc, &vrs, testStepResult)
+	testStepResult.ComputedVars.AddAll(newVars)
 	tc.TestStepResults = []TestStepResult{*testStepResult}
 
-	computedVars, err := DumpString(testStepResult.ComputedVars)
+	vrs.AddAll(newVars)
+	computedVars, err := DumpStringPreserveCase(vrs)
 	if err != nil {
 		return nil, errors.Wrapf(err, "unable to dump testcase computedVars")
 	}
@@ -301,8 +303,8 @@ func (v *Venom) RunUserExecutor(ctx context.Context, runner ExecutorRunner, tcIn
 		return nil, errors.Wrapf(err, "unable to compute result")
 	}
 
-	for k, v := range result {
-		switch z := v.(type) {
+	for k, value := range result {
+		switch z := value.(type) {
 		case string:
 			var outJSON interface{}
 			if err := JSONUnmarshal([]byte(z), &outJSON); err == nil {

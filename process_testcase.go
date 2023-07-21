@@ -130,10 +130,9 @@ func (v *Venom) parseTestCase(ctx context.Context, tc *TestCase) ([]string, []st
 
 func (v *Venom) runTestCase(ctx context.Context, tc *TestCase, testSuiteVariables *H) H {
 	ctx = context.WithValue(ctx, ContextKey("testcase"), tc.Name)
-	result := TestStepResult{}
 	Info(ctx, "Starting testcase")
 	// ##### RUN Test Steps Here
-	computedVars := v.runTestSteps(ctx, tc, testSuiteVariables, &result)
+	computedVars := v.runTestSteps(ctx, tc, testSuiteVariables, nil)
 	cleanVars := H{}
 	local := *testSuiteVariables
 	for k, _ := range computedVars {
@@ -169,8 +168,9 @@ func (v *Venom) runTestSteps(ctx context.Context, tc *TestCase, testSuiteVariabl
 	}
 
 	var knowExecutors = map[string]struct{}{}
-	var previousStepVars = H{}
+	previousStepVars := H{}
 	previousStepVars.AddAll(*testSuiteVariables)
+	onlyNewVars := H{}
 
 	fromUserExecutor := tsIn != nil
 
@@ -205,8 +205,8 @@ func (v *Venom) runTestSteps(ctx context.Context, tc *TestCase, testSuiteVariabl
 				return nil
 			}
 
-			for k, v := range vars {
-				content, err := interpolate.Do(v, vars)
+			for k, value := range vars {
+				content, err := interpolate.Do(value, vars)
 				if err != nil {
 					tsResult.appendError(err)
 					Error(ctx, "unable to interpolate variable %q: %v", k, err)
@@ -323,6 +323,7 @@ func (v *Venom) runTestSteps(ctx context.Context, tc *TestCase, testSuiteVariabl
 				} else {
 					tsResult.Status = StatusPass
 				}
+				tsResult.ComputedVars.AddAll(vars)
 
 				tsResult.End = time.Now()
 				tsResult.Duration = tsResult.End.Sub(tsResult.Start).Seconds()
@@ -363,11 +364,12 @@ func (v *Venom) runTestSteps(ctx context.Context, tc *TestCase, testSuiteVariabl
 			}
 			if assign != nil {
 				tsResult.ComputedVars.AddAll(assign)
+				onlyNewVars.AddAll(assign)
 				previousStepVars.AddAll(assign)
 			}
 		}
 	}
-	return previousStepVars
+	return onlyNewVars
 }
 
 // Set test step name (defaults to executor name, excepted if it got a "name" attribute. in range, also print key)
@@ -381,14 +383,14 @@ func (v *Venom) setTestStepName(ts *TestStepResult, e ExecutorRunner, step TestS
 	}
 	if ranged.Enabled {
 		if rangedIndex == 0 {
-			v.Print("\n")
+			v.Println("\n")
 		}
 		name = fmt.Sprintf("%s (range=%s)", name, rangedData.Key)
 	}
 	ts.Name = name
 
 	if print || ranged.Enabled {
-		v.Print(" \t\t• %s", ts.Name)
+		v.Println(" \t\t• %s", ts.Name)
 	}
 }
 

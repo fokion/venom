@@ -24,7 +24,7 @@ func (v *Venom) RunTestStep(ctx context.Context, e ExecutorRunner, tc *TestCase,
 
 	var assertRes AssertionsApplied
 	var result interface{}
-
+	newVars := H{}
 	for tsResult.Retries = 0; tsResult.Retries <= e.Retry() && !assertRes.OK; tsResult.Retries++ {
 		if tsResult.Retries > 1 && !assertRes.OK {
 			Debug(ctx, "Sleep %d, it's %d attempt", e.Delay(), tsResult.Retries)
@@ -47,6 +47,7 @@ func (v *Venom) RunTestStep(ctx context.Context, e ExecutorRunner, tc *TestCase,
 		mapResultString, _ := DumpString(result)
 		for k, value := range mapResultString {
 			tsResult.ComputedVars.Add(k, value)
+			newVars.Add(k, value)
 		}
 		tsResult.ComputedVars.AddAll(AllVarsFromCtx(ctx))
 		if v.Verbose >= 2 {
@@ -74,29 +75,31 @@ func (v *Venom) RunTestStep(ctx context.Context, e ExecutorRunner, tc *TestCase,
 			tc.computedVerbose = append(tc.computedVerbose, fmt.Sprintf("writing %s", filename))
 		}
 
-		for ninfo, i := range e.Info() {
-			info, err := interpolate.Do(i, mapResultString)
+		allvars, _ := DumpStringPreserveCase(tsResult.ComputedVars)
+
+		for ninfo, value := range e.Info() {
+			info, err := interpolate.Do(value, allvars)
 			if err != nil {
-				Error(ctx, "unable to parse %q: %v", i, err)
+				Error(ctx, "unable to parse %q: %v", value, err)
 				continue
 			}
 			if info == "" {
 				continue
 			}
 			filename := StringVarFromCtx(ctx, "venom.testsuite.filename")
-			lineNumber := findLineNumber(filename, tc.originalName, stepNumber, i, ninfo+1)
+			lineNumber := findLineNumber(filename, tc.originalName, stepNumber, value, ninfo+1)
 			if lineNumber > 0 {
 				info += fmt.Sprintf(" (%s:%d)", filename, lineNumber)
 			} else if tc.IsExecutor {
 				filename = StringVarFromCtx(ctx, "venom.executor.filename")
 				originalName := StringVarFromCtx(ctx, "venom.executor.name")
-				lineNumber = findLineNumber(filename, originalName, stepNumber, i, ninfo+1)
+				lineNumber = findLineNumber(filename, originalName, stepNumber, value, ninfo+1)
 				if lineNumber > 0 {
 					info += fmt.Sprintf(" (%s:%d)", filename, lineNumber)
 				}
 			}
 			Info(ctx, info)
-			v.Println(info)
+			v.Println("\t  %s%s %s", "\t  ", Cyan("[info]"), Cyan(info))
 		}
 
 		if result == nil {
@@ -140,7 +143,7 @@ func (v *Venom) RunTestStep(ctx context.Context, e ExecutorRunner, tc *TestCase,
 	tsResult.Systemerr += assertRes.systemerr + "\n"
 	tsResult.Systemout += assertRes.systemout + "\n"
 
-	return result, tsResult.ComputedVars
+	return result, newVars
 }
 
 func (v *Venom) runTestStepExecutor(ctx context.Context, e ExecutorRunner, tc *TestCase, testStepResult *TestStepResult, step TestStep, vars *H) (interface{}, error) {
