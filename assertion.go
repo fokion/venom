@@ -363,7 +363,7 @@ func testConditionalStatement(ctx context.Context, tc *TestCase, assertions []st
 	var failures []string
 	for _, assertion := range assertions {
 		Debug(ctx, "evaluating %s", assertion)
-		assert, err := parseAssertions(ctx, assertion, variables)
+		assert, err := parseAssertions(ctx, assertion, *variables)
 		if err != nil {
 			Error(ctx, "unable to parse assertion: %v", err)
 			return failures, err

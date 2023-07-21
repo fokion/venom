@@ -182,6 +182,7 @@ type TestStepResult struct {
 	RangedIndex       int               `json:"rangedIndex" yaml:"rangedIndex"`
 	RangedEnable      bool              `json:"rangedEnable" yaml:"rangedEnable"`
 	InputVars         map[string]string `json:"inputVars" yaml:"-"`
+	NewVars           map[string]string `json:"newVars" yaml:"-"`
 	ComputedVars      H                 `json:"computedVars" yaml:"-"`
 	ComputedInfo      []string          `json:"computedInfos" yaml:"-"`
 	ComputedVerbose   []string          `json:"computedVerbose" yaml:"-"`

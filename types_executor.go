@@ -225,7 +225,7 @@ func (v *Venom) RunUserExecutor(ctx context.Context, runner ExecutorRunner, tcIn
 		return nil, errors.Wrapf(err, "unable to reload executor")
 	}
 	ux := exe.GetExecutor().(UserExecutor)
-	testStepResult := &TestStepResult{}
+	testStepResult := &TestStepResult{Name: ux.Executor}
 	tc := &TestCase{
 		TestCaseInput: TestCaseInput{
 			Name:         ux.Executor,
@@ -241,13 +241,15 @@ func (v *Venom) RunUserExecutor(ctx context.Context, runner ExecutorRunner, tcIn
 	vrs.Add("venom.executor.filename", ux.Filename)
 	vrs.Add("venom.executor.name", ux.Executor)
 
-	Debug(ctx, "running user executor %v", tc.Name)
+	Debug(ctx, "running user executor %v", ux.Executor)
 	testStepResult.ComputedVars = H{}
 	newVars := v.runTestSteps(ctx, tc, &vrs, testStepResult)
-	testStepResult.ComputedVars.AddAll(newVars)
+	if newVars != nil {
+		testStepResult.ComputedVars.AddAll(newVars)
+		vrs.AddAll(newVars)
+	}
 	tc.TestStepResults = []TestStepResult{*testStepResult}
 
-	vrs.AddAll(newVars)
 	computedVars, err := DumpStringPreserveCase(vrs)
 	if err != nil {
 		return nil, errors.Wrapf(err, "unable to dump testcase computedVars")

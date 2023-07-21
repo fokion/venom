@@ -172,7 +172,7 @@ func (v *Venom) runTestSteps(ctx context.Context, tc *TestCase, testSuiteVariabl
 	previousStepVars.AddAll(*testSuiteVariables)
 	onlyNewVars := H{}
 
-	fromUserExecutor := tsIn != nil
+	//fromUserExecutor := tsIn != nil
 
 	for stepNumber, rawStep := range tc.RawTestSteps {
 		stepVars := H{}
@@ -239,9 +239,6 @@ func (v *Venom) runTestSteps(ctx context.Context, tc *TestCase, testSuiteVariabl
 					break
 				}
 			}
-			if strings.Contains(content, "{{.") {
-				Error(ctx, "We could not replace all variables")
-			}
 
 			if ranged.Enabled {
 				Info(ctx, "Step #%d-%d content is: %s", stepNumber, rangedIndex, content)
@@ -253,6 +250,7 @@ func (v *Venom) runTestSteps(ctx context.Context, tc *TestCase, testSuiteVariabl
 			if err != nil {
 				tsResult.appendError(err)
 				Error(ctx, "unable to marshal raw: %v", err)
+				return nil
 			}
 			tsResult.Raw = data
 
@@ -267,6 +265,7 @@ func (v *Venom) runTestSteps(ctx context.Context, tc *TestCase, testSuiteVariabl
 			if err != nil {
 				tsResult.appendError(err)
 				Error(ctx, "unable to marshal step #%d to json: %v", stepNumber, err)
+				return nil
 			}
 			tsResult.Interpolated = data2
 
@@ -277,12 +276,12 @@ func (v *Venom) runTestSteps(ctx context.Context, tc *TestCase, testSuiteVariabl
 
 			tc.testSteps = append(tc.testSteps, step)
 			var runner ExecutorRunner
-			Info(ctx, "variables before execution %v", stepVars)
+
 			ctx, runner, err = v.GetExecutorRunner(ctx, &step, &stepVars)
 			if err != nil {
 				tsResult.appendError(err)
 				Error(ctx, "unable to get executor: %v", err)
-				break
+				return nil
 			}
 
 			if runner != nil {
@@ -292,22 +291,22 @@ func (v *Venom) runTestSteps(ctx context.Context, tc *TestCase, testSuiteVariabl
 					if err != nil {
 						tsResult.appendError(err)
 						Error(ctx, "unable to setup executor: %v", err)
-						break
+						return nil
 					}
 					knowExecutors[runner.Name()] = struct{}{}
 					if err := runner.TearDown(ctx); err != nil {
 						tsResult.appendError(err)
 						Error(ctx, "unable to teardown executor: %v", err)
-						break
+						return nil
 					}
 				}
 			}
 
-			printStepName := v.Verbose >= 1 && !fromUserExecutor
-			v.setTestStepName(tsResult, runner, step, &ranged, &rangedData, rangedIndex, printStepName)
+			//printStepName := v.Verbose >= 1
+			v.setTestStepName(tsResult, runner, step, &ranged, &rangedData, rangedIndex)
 
 			// ##### RUN Test Step Here
-			Info(ctx, fmt.Sprintf("Checking skip for test step %v", printStepName))
+			Info(ctx, fmt.Sprintf("Checking skip for test step %v", tsResult.Name))
 			skip, err := parseSkip(ctx, tc, &stepVars, tsResult, rawStep, stepNumber)
 			if err != nil {
 				tsResult.appendError(err)
@@ -317,21 +316,58 @@ func (v *Venom) runTestSteps(ctx context.Context, tc *TestCase, testSuiteVariabl
 			} else {
 				tsResult.Start = time.Now()
 				tsResult.Status = StatusRun
+				if v.Verbose >= 1 {
+					v.Print("\n \t\t\t • %v", tsResult.Name)
+				}
 				_, vars := v.RunTestStep(ctx, runner, tc, tsResult, stepNumber, rangedIndex, step, &previousStepVars)
+
+				if vars != nil {
+					previousStepVars.AddAll(vars)
+					if tsResult.ComputedVars == nil {
+						tsResult.ComputedVars = H{}
+					}
+					tsResult.ComputedVars.AddAll(vars)
+					if tsResult.NewVars == nil {
+						tsResult.NewVars = make(map[string]string)
+					}
+					for k, value := range vars {
+						tsResult.NewVars[k] = fmt.Sprintf("%v", value)
+					}
+				}
+
 				if len(tsResult.Errors) > 0 || !tsResult.AssertionsApplied.OK {
+					if v.Verbose >= 1 {
+						v.Println(" %v", Red(StatusFail))
+					}
 					tsResult.Status = StatusFail
 				} else {
+					if v.Verbose >= 1 {
+						v.Println(" %v", Green(StatusPass))
+					}
 					tsResult.Status = StatusPass
 				}
-				tsResult.ComputedVars.AddAll(vars)
 
 				tsResult.End = time.Now()
 				tsResult.Duration = tsResult.End.Sub(tsResult.Start).Seconds()
 
 				//mapResult := GetExecutorResult(result)
-				previousStepVars.AddAll(vars)
 
 				tc.testSteps = append(tc.testSteps, step)
+
+				assign, _, err := processVariableAssignments(ctx, tc.Name, &previousStepVars, rawStep)
+				if err != nil {
+					tsResult.appendError(err)
+					Error(ctx, "unable to process variable assignments: %v", err)
+					return nil
+				}
+				if assign != nil {
+					tsResult.ComputedVars.AddAll(assign)
+					onlyNewVars.AddAll(assign)
+					previousStepVars.AddAll(assign)
+					if tsIn != nil {
+						tsIn.ComputedVars.AddAll(assign)
+					}
+				}
 			}
 
 			var isRequired bool
@@ -356,24 +392,13 @@ func (v *Venom) runTestSteps(ctx context.Context, tc *TestCase, testSuiteVariabl
 
 			//tsResult.ComputedVars = tc.computedVars.Clone()
 
-			assign, _, err := processVariableAssignments(ctx, tc.Name, &tsResult.ComputedVars, rawStep)
-			if err != nil {
-				tsResult.appendError(err)
-				Error(ctx, "unable to process variable assignments: %v", err)
-				break
-			}
-			if assign != nil {
-				tsResult.ComputedVars.AddAll(assign)
-				onlyNewVars.AddAll(assign)
-				previousStepVars.AddAll(assign)
-			}
 		}
 	}
 	return onlyNewVars
 }
 
 // Set test step name (defaults to executor name, excepted if it got a "name" attribute. in range, also print key)
-func (v *Venom) setTestStepName(ts *TestStepResult, e ExecutorRunner, step TestStep, ranged *Range, rangedData *RangeData, rangedIndex int, print bool) {
+func (v *Venom) setTestStepName(ts *TestStepResult, e ExecutorRunner, step TestStep, ranged *Range, rangedData *RangeData, rangedIndex int) {
 	name := e.Name()
 	if value, ok := step["name"]; ok {
 		switch value := value.(type) {
@@ -388,10 +413,6 @@ func (v *Venom) setTestStepName(ts *TestStepResult, e ExecutorRunner, step TestS
 		name = fmt.Sprintf("%s (range=%s)", name, rangedData.Key)
 	}
 	ts.Name = name
-
-	if print || ranged.Enabled {
-		v.Println(" \t\t• %s", ts.Name)
-	}
 }
 
 // Print a single step result (if verbosity is enabled)
@@ -416,16 +437,16 @@ func (v *Venom) printTestStepResult(tc *TestCase, ts *TestStepResult, tsIn *Test
 					}
 				}
 			} else if ts.Status == StatusSkip {
-				v.Println(" %s", Gray(StatusSkip))
+				v.Println(" \t\t  %s", Gray(StatusSkip))
 			} else {
 				if ts.Retries == 0 {
-					v.Println(" %s", Green(StatusPass))
+					v.Println(" \t\t  %s", Green(StatusPass))
 				} else {
-					v.Println(" %s (after %d attempts)", Green(StatusPass), ts.Retries)
+					v.Println(" \t\t  %s (after %d attempts)", Green(StatusPass), ts.Retries)
 				}
 			}
 			for _, i := range ts.ComputedInfo {
-				v.Println("\t  %s%s %s", "\t  ", Cyan("[info]"), Cyan(i))
+				v.Println(" \t\t  %s%s %s", "\t  ", Cyan("[info]"), Cyan(i))
 			}
 			for _, i := range ts.ComputedVerbose {
 				v.PrintlnIndentedTrace(i, "\t  ")
