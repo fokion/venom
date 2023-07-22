@@ -225,25 +225,23 @@ func (v *Venom) RunUserExecutor(ctx context.Context, runner ExecutorRunner, tcIn
 		return nil, errors.Wrapf(err, "unable to reload executor")
 	}
 	ux := exe.GetExecutor().(UserExecutor)
-	testStepResult := &TestStepResult{Name: ux.Executor}
+	testStepResult := &TestStepResult{Name: slug.Make(ux.Executor)}
 	tc := &TestCase{
 		TestCaseInput: TestCaseInput{
 			Name:         ux.Executor,
 			RawTestSteps: ux.RawTestSteps,
 		},
+		originalName:    ux.Executor,
 		IsExecutor:      true,
 		TestStepResults: []TestStepResult{},
 	}
-
-	tc.originalName = tc.Name
-	tc.Name = slug.Make(tc.Name)
 
 	vrs.Add("venom.executor.filename", ux.Filename)
 	vrs.Add("venom.executor.name", ux.Executor)
 
 	Debug(ctx, "running user executor %v", ux.Executor)
 	testStepResult.ComputedVars = H{}
-	newVars := v.runTestSteps(ctx, tc, &vrs, testStepResult)
+	newVars := v.runTestSteps(ctx, tc, &vrs)
 	if newVars != nil {
 		testStepResult.ComputedVars.AddAll(newVars)
 		vrs.AddAll(newVars)

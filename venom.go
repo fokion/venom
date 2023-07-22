@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"github.com/confluentinc/bincover"
 	"github.com/fatih/color"
-	"github.com/ovh/cds/sdk/interpolate"
 	"github.com/pkg/errors"
 	"github.com/rockbears/yaml"
 	log "github.com/sirupsen/logrus"
@@ -213,6 +212,10 @@ func (v *Venom) getUserExecutorFilesPath(vars map[string]string) (filePaths []st
 }
 
 func (v *Venom) registerUserExecutors(ctx context.Context, name string, vars map[string]string) error {
+	_, ok := v.executorsUser[name]
+	if ok {
+		return nil
+	}
 	executorsPath, err := v.getUserExecutorFilesPath(vars)
 	if err != nil {
 		return err
@@ -227,6 +230,19 @@ func (v *Venom) registerUserExecutors(ctx context.Context, name string, vars map
 				return errors.Wrapf(err, "unable to read file %q", f)
 			}
 			v.executorFileCache[f] = btes
+		}
+		executorName, _ := getExecutorName(btes)
+		if len(executorName) > 0 {
+			if strings.Compare(executorName, name) != 0 {
+				continue
+			}
+		} else {
+			fileName := filepath.Base(f)
+			executorName = strings.TrimSuffix(fileName, filepath.Ext(fileName))
+		}
+		_, parsed := v.executorsUser[executorName]
+		if parsed {
+			continue
 		}
 
 		varsFromInput, err := getUserExecutorInputYML(ctx, btes)
@@ -254,23 +270,18 @@ func (v *Venom) registerUserExecutors(ctx context.Context, name string, vars map
 			}
 		}
 
-		content, err := interpolate.Do(string(btes), varsComputed)
-		if err != nil {
-			return err
-		}
-
 		ux := UserExecutor{Filename: f}
-		if err := yaml.Unmarshal([]byte(content), &ux); err != nil {
-			return errors.Wrapf(err, "unable to parse file %q with content %v", f, content)
+		if err := yaml.Unmarshal(btes, &ux); err != nil {
+			return errors.Wrapf(err, "unable to parse file %q with content %v", f, btes)
 		}
 
-		log.Debugf("User executor %q revolved with content %v", f, content)
+		log.Debugf("User executor %q revolved with content %v", f, btes)
 
 		for k, vr := range varsComputed {
 			ux.Input.Add(k, vr)
 		}
-
-		v.RegisterExecutorUser(ux.Executor, ux)
+		ux.Executor = executorName
+		v.RegisterExecutorUser(executorName, ux)
 	}
 	return nil
 }

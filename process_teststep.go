@@ -147,7 +147,6 @@ func (v *Venom) RunTestStep(ctx context.Context, e ExecutorRunner, tc *TestCase,
 
 func (v *Venom) runTestStepExecutor(ctx context.Context, e ExecutorRunner, tc *TestCase, testStepResult *TestStepResult, step TestStep, vars *H) (interface{}, error) {
 	ctx = context.WithValue(ctx, ContextKey("executor"), e.Name())
-	v.Print("\n\t\t • %v", e.Name())
 	if e.Timeout() == 0 {
 		if e.Type() == "user" {
 			return v.RunUserExecutor(ctx, e, tc, testStepResult, step, vars)
@@ -158,6 +157,7 @@ func (v *Venom) runTestStepExecutor(ctx context.Context, e ExecutorRunner, tc *T
 	ctxTimeout, cancel := context.WithTimeout(ctx, time.Duration(e.Timeout())*time.Second)
 	defer cancel()
 
+	v.Println("%v", step)
 	ch := make(chan interface{})
 	cherr := make(chan error)
 	go func(e ExecutorRunner, step TestStep) {
@@ -177,13 +177,13 @@ func (v *Venom) runTestStepExecutor(ctx context.Context, e ExecutorRunner, tc *T
 
 	select {
 	case err := <-cherr:
-		v.Println(" %s", Red(StatusFail))
+		v.Println("\n\t\t • %v %s", e.Name(), Red(StatusFail))
 		return nil, err
 	case result := <-ch:
-		v.Println(" %s", Green(StatusPass))
+		v.Println("\n\t\t • %v %s", e.Name(), Green(StatusPass))
 		return result, nil
 	case <-ctxTimeout.Done():
-		v.Println(" %s", Yellow("OUT OF TIME"))
+		v.Println("\n\t\t • %v %s", e.Name(), Yellow("OUT OF TIME"))
 		return nil, fmt.Errorf("Timeout after %d second(s)", e.Timeout())
 	}
 }

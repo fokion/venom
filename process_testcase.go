@@ -63,7 +63,7 @@ func (v *Venom) parseTestCase(ctx context.Context, tc *TestCase) ([]string, []st
 				}
 				extractedVars = append(extractedVars, tc.Name+"."+k)
 				if strings.HasSuffix(k, "__type__") && dumpE[k] == "Map" {
-					// go-dump doesnt dump the map name, here is a workaround
+					// go-dump doesn't dump the map name, here is a workaround
 					k = strings.TrimSuffix(k, "__type__")
 					extractedVars = append(extractedVars, tc.Name+"."+k)
 				}
@@ -132,28 +132,36 @@ func (v *Venom) runTestCase(ctx context.Context, tc *TestCase, testSuiteVariable
 	ctx = context.WithValue(ctx, ContextKey("testcase"), tc.Name)
 	Info(ctx, "Starting testcase")
 	// ##### RUN Test Steps Here
-	computedVars := v.runTestSteps(ctx, tc, testSuiteVariables, nil)
+	computedVars := v.runTestSteps(ctx, tc, testSuiteVariables)
+	cleanVars := GetOnlyNewVariables(testSuiteVariables, computedVars)
+	Info(ctx, "Ending testcase")
+	return cleanVars
+}
+
+func GetOnlyNewVariables(allVariables *H, computedVars H) H {
 	cleanVars := H{}
-	local := *testSuiteVariables
+	local := *allVariables
 	for k, _ := range computedVars {
 		_, exists := local[k]
 		if !exists {
 			cleanVars.Add(k, computedVars[k])
 		}
 	}
-	Info(ctx, "Ending testcase")
 	return cleanVars
 }
-
-func (v *Venom) runTestSteps(ctx context.Context, tc *TestCase, testSuiteVariables *H, tsIn *TestStepResult) H {
+func failTestCase(tc *TestCase, err error) {
+	testStepResult := TestStepResult{}
+	testStepResult.appendError(err)
+	tc.Status = StatusFail
+	tc.TestStepResults = append(tc.TestStepResults, testStepResult)
+}
+func (v *Venom) runTestSteps(ctx context.Context, tc *TestCase, testCaseVariables *H) H {
 	if len(tc.Skip) > 0 {
 
-		failures, err := testConditionalStatement(ctx, tc, tc.Skip, testSuiteVariables, "skipping testcase %q: %v")
+		failures, err := testConditionalStatement(ctx, tc, tc.Skip, testCaseVariables, "skipping testcase %q: %v")
 		if err != nil {
 			Error(ctx, "unable to evaluate \"skip\" assertions: %v", err)
-			testStepResult := TestStepResult{}
-			testStepResult.appendError(err)
-			tc.TestStepResults = append(tc.TestStepResults, testStepResult)
+			failTestCase(tc, err)
 			return nil
 		}
 		if len(failures) > 0 {
@@ -169,7 +177,7 @@ func (v *Venom) runTestSteps(ctx context.Context, tc *TestCase, testSuiteVariabl
 
 	var knowExecutors = map[string]struct{}{}
 	previousStepVars := H{}
-	previousStepVars.AddAll(*testSuiteVariables)
+	previousStepVars.AddAll(*testCaseVariables)
 	onlyNewVars := H{}
 
 	//fromUserExecutor := tsIn != nil
@@ -183,7 +191,7 @@ func (v *Venom) runTestSteps(ctx context.Context, tc *TestCase, testSuiteVariabl
 		ranged, err := parseRanged(ctx, rawStep, &stepVars)
 		if err != nil {
 			Error(ctx, "unable to parse \"range\" attribute: %v", err)
-			tsIn.appendError(err)
+			failTestCase(tc, err)
 			return nil
 		}
 
@@ -201,15 +209,15 @@ func (v *Venom) runTestSteps(ctx context.Context, tc *TestCase, testSuiteVariabl
 			vars, err := DumpStringPreserveCase(stepVars)
 			if err != nil {
 				Error(ctx, "unable to dump testcase vars: %v", err)
-				tsResult.appendError(err)
+				failTestCase(tc, err)
 				return nil
 			}
 
 			for k, value := range vars {
 				content, err := interpolate.Do(value, vars)
 				if err != nil {
-					tsResult.appendError(err)
 					Error(ctx, "unable to interpolate variable %q: %v", k, err)
+					failTestCase(tc, err)
 					return nil
 				}
 				vars[k] = content
@@ -231,8 +239,8 @@ func (v *Venom) runTestSteps(ctx context.Context, tc *TestCase, testSuiteVariabl
 			for i := 0; i < 10; i++ {
 				content, err = interpolate.Do(string(rawStep), vars)
 				if err != nil {
-					tsResult.appendError(err)
 					Error(ctx, "unable to interpolate step: %v", err)
+					failTestCase(tc, err)
 					return nil
 				}
 				if !strings.Contains(content, "{{.") {
@@ -248,8 +256,8 @@ func (v *Venom) runTestSteps(ctx context.Context, tc *TestCase, testSuiteVariabl
 
 			data, err := yaml.Marshal(rawStep)
 			if err != nil {
-				tsResult.appendError(err)
 				Error(ctx, "unable to marshal raw: %v", err)
+				failTestCase(tc, err)
 				return nil
 			}
 			tsResult.Raw = data
@@ -263,8 +271,8 @@ func (v *Venom) runTestSteps(ctx context.Context, tc *TestCase, testSuiteVariabl
 
 			data2, err := yaml.JSONToYAML([]byte(content))
 			if err != nil {
-				tsResult.appendError(err)
 				Error(ctx, "unable to marshal step #%d to json: %v", stepNumber, err)
+				failTestCase(tc, err)
 				return nil
 			}
 			tsResult.Interpolated = data2
@@ -279,8 +287,8 @@ func (v *Venom) runTestSteps(ctx context.Context, tc *TestCase, testSuiteVariabl
 
 			ctx, runner, err = v.GetExecutorRunner(ctx, &step, &stepVars)
 			if err != nil {
-				tsResult.appendError(err)
 				Error(ctx, "unable to get executor: %v", err)
+				failTestCase(tc, err)
 				return nil
 			}
 
@@ -289,14 +297,14 @@ func (v *Venom) runTestSteps(ctx context.Context, tc *TestCase, testSuiteVariabl
 				if !known {
 					ctx, err = runner.Setup(ctx, stepVars)
 					if err != nil {
-						tsResult.appendError(err)
 						Error(ctx, "unable to setup executor: %v", err)
+						failTestCase(tc, err)
 						return nil
 					}
 					knowExecutors[runner.Name()] = struct{}{}
 					if err := runner.TearDown(ctx); err != nil {
-						tsResult.appendError(err)
 						Error(ctx, "unable to teardown executor: %v", err)
+						failTestCase(tc, err)
 						return nil
 					}
 				}
@@ -349,24 +357,18 @@ func (v *Venom) runTestSteps(ctx context.Context, tc *TestCase, testSuiteVariabl
 
 				tsResult.End = time.Now()
 				tsResult.Duration = tsResult.End.Sub(tsResult.Start).Seconds()
-
-				//mapResult := GetExecutorResult(result)
-
 				tc.testSteps = append(tc.testSteps, step)
 
 				assign, _, err := processVariableAssignments(ctx, tc.Name, &previousStepVars, rawStep)
 				if err != nil {
-					tsResult.appendError(err)
 					Error(ctx, "unable to process variable assignments: %v", err)
+					failTestCase(tc, err)
 					return nil
 				}
 				if assign != nil {
 					tsResult.ComputedVars.AddAll(assign)
 					onlyNewVars.AddAll(assign)
 					previousStepVars.AddAll(assign)
-					if tsIn != nil {
-						tsIn.ComputedVars.AddAll(assign)
-					}
 				}
 			}
 
@@ -382,16 +384,13 @@ func (v *Venom) runTestSteps(ctx context.Context, tc *TestCase, testSuiteVariabl
 				if isRequired {
 					failure := newFailure(ctx, *tc, stepNumber, rangedIndex, "", fmt.Errorf("At least one required assertion failed, skipping remaining steps"))
 					tsResult.appendFailure(*failure)
-					v.printTestStepResult(tc, tsResult, tsIn, ranged, stepNumber, true)
+					v.printTestStepResult(tc, tsResult, ranged, stepNumber, true)
 					return nil
 				}
-				v.printTestStepResult(tc, tsResult, tsIn, ranged, stepNumber, false)
+				v.printTestStepResult(tc, tsResult, ranged, stepNumber, false)
 				continue
 			}
-			v.printTestStepResult(tc, tsResult, tsIn, ranged, stepNumber, false)
-
-			//tsResult.ComputedVars = tc.computedVars.Clone()
-
+			v.printTestStepResult(tc, tsResult, ranged, stepNumber, false)
 		}
 	}
 	return onlyNewVars
@@ -416,13 +415,9 @@ func (v *Venom) setTestStepName(ts *TestStepResult, e ExecutorRunner, step TestS
 }
 
 // Print a single step result (if verbosity is enabled)
-func (v *Venom) printTestStepResult(tc *TestCase, ts *TestStepResult, tsIn *TestStepResult, ranged Range, stepNumber int, mustAssertionFailed bool) {
-	fromUserExecutor := tsIn != nil
-	if fromUserExecutor {
-		tsIn.appendFailure(ts.Errors...)
-	}
+func (v *Venom) printTestStepResult(tc *TestCase, ts *TestStepResult, ranged Range, stepNumber int, mustAssertionFailed bool) {
 	if ranged.Enabled || v.Verbose >= 1 {
-		if !fromUserExecutor { //Else print step status
+		if !tc.IsExecutor { //Else print step status
 			if len(ts.Errors) > 0 {
 				v.Println(" %s", Red(StatusFail))
 				for _, f := range ts.Errors {
@@ -452,6 +447,8 @@ func (v *Venom) printTestStepResult(tc *TestCase, ts *TestStepResult, tsIn *Test
 				v.PrintlnIndentedTrace(i, "\t  ")
 			}
 
+		} else {
+			ts.appendFailure(ts.Errors...)
 		}
 	}
 }
