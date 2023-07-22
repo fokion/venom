@@ -239,7 +239,7 @@ func (v *Venom) runTestSteps(ctx context.Context, tc *TestCase, testCaseVariable
 			var content string
 			for i := 0; i < 10; i++ {
 				payloadBytes, _ := json.Marshal(rawStep)
-				content, err = interpolate.Do(strings.ReplaceAll(string(payloadBytes), "\\\"", "'"), vars)
+				content, err = interpolate.Do(string(payloadBytes), vars)
 				if err != nil {
 					Error(ctx, "unable to interpolate step: %v", err)
 					failTestCase(tc, err)
