@@ -426,7 +426,7 @@ func (e Executor) TLSOptions(ctx context.Context) ([]func(*http.Transport) error
 
 	workdir := venom.StringVarFromCtx(ctx, "venom.testsuite.workdir")
 
-	if e.TLSRootCA != "" {
+	if strings.Trim(e.TLSRootCA, " ") != "" {
 		TLSRootCAFilepath := filepath.Join(workdir, e.TLSRootCA)
 		var TLSRootCA []byte
 		if _, err := os.Stat(TLSRootCAFilepath); err == nil {
@@ -441,7 +441,7 @@ func (e Executor) TLSOptions(ctx context.Context) ([]func(*http.Transport) error
 	}
 
 	var TLSClientCert, TLSClientKey []byte
-	if e.TLSClientCert != "" {
+	if strings.Trim(e.TLSClientCert, " ") != "" {
 		TLSClientCertFilepath := filepath.Join(workdir, e.TLSClientCert)
 		if _, err := os.Stat(TLSClientCertFilepath); err == nil {
 			TLSClientCert, err = os.ReadFile(TLSClientCertFilepath)
@@ -453,7 +453,7 @@ func (e Executor) TLSOptions(ctx context.Context) ([]func(*http.Transport) error
 		}
 	}
 
-	if e.TLSClientKey != "" {
+	if strings.Trim(e.TLSClientKey, " ") != "" {
 		TLSClientKeyFilepath := filepath.Join(workdir, e.TLSClientKey)
 		if _, err := os.Stat(TLSClientKeyFilepath); err == nil {
 			TLSClientKey, err = os.ReadFile(TLSClientKeyFilepath)

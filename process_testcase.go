@@ -24,7 +24,8 @@ func (v *Venom) parseTestCase(ctx context.Context, tc *TestCase) ([]string, []st
 	initialVariables := *v.InitialVariables
 	Info(ctx, "%v", initialVariables)
 	for _, rawStep := range tc.RawTestSteps {
-		content, err := interpolate.Do(string(rawStep), initialVariables)
+		payloadBytes, _ := json.Marshal(rawStep)
+		content, err := interpolate.Do(string(payloadBytes), initialVariables)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -237,7 +238,8 @@ func (v *Venom) runTestSteps(ctx context.Context, tc *TestCase, testCaseVariable
 
 			var content string
 			for i := 0; i < 10; i++ {
-				content, err = interpolate.Do(string(rawStep), vars)
+				payloadBytes, _ := json.Marshal(rawStep)
+				content, err = interpolate.Do(strings.ReplaceAll(string(payloadBytes), "\\\"", "'"), vars)
 				if err != nil {
 					Error(ctx, "unable to interpolate step: %v", err)
 					failTestCase(tc, err)
@@ -254,28 +256,28 @@ func (v *Venom) runTestSteps(ctx context.Context, tc *TestCase, testCaseVariable
 				Info(ctx, "Step #%d content is: %s", stepNumber, content)
 			}
 
-			data, err := yaml.Marshal(rawStep)
-			if err != nil {
-				Error(ctx, "unable to marshal raw: %v", err)
-				failTestCase(tc, err)
-				return nil
-			}
-			tsResult.Raw = data
+			//data, err := yaml.Marshal(rawStep)
+			//if err != nil {
+			//	Error(ctx, "unable to marshal raw: %v", err)
+			//	failTestCase(tc, err)
+			//	return nil
+			//}
+			//tsResult.Raw = data
 
 			var step TestStep
-			if err := yaml.Unmarshal([]byte(content), &step); err != nil {
+			if err := json.Unmarshal([]byte(content), &step); err != nil {
 				tsResult.appendError(err)
 				Error(ctx, "unable to parse step #%d: %v", stepNumber, err)
 				return nil
 			}
 
-			data2, err := yaml.JSONToYAML([]byte(content))
-			if err != nil {
-				Error(ctx, "unable to marshal step #%d to json: %v", stepNumber, err)
-				failTestCase(tc, err)
-				return nil
-			}
-			tsResult.Interpolated = data2
+			//data2, err := yaml.JSONToYAML([]byte(content))
+			//if err != nil {
+			//	Error(ctx, "unable to marshal step #%d to json: %v", stepNumber, err)
+			//	failTestCase(tc, err)
+			//	return nil
+			//}
+			//tsResult.Interpolated = data2
 
 			tsResult.Number = stepNumber
 			tsResult.RangedIndex = rangedIndex

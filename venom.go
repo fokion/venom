@@ -216,6 +216,9 @@ func (v *Venom) registerUserExecutors(ctx context.Context, name string, vars map
 	if ok {
 		return nil
 	}
+	if v.executorFileCache != nil && len(v.executorFileCache) != 0 {
+		return errors.Errorf("Could not find executor with name %v ", name)
+	}
 	executorsPath, err := v.getUserExecutorFilesPath(vars)
 	if err != nil {
 		return err
@@ -232,17 +235,9 @@ func (v *Venom) registerUserExecutors(ctx context.Context, name string, vars map
 			v.executorFileCache[f] = btes
 		}
 		executorName, _ := getExecutorName(btes)
-		if len(executorName) > 0 {
-			if strings.Compare(executorName, name) != 0 {
-				continue
-			}
-		} else {
+		if len(executorName) == 0 {
 			fileName := filepath.Base(f)
 			executorName = strings.TrimSuffix(fileName, filepath.Ext(fileName))
-		}
-		_, parsed := v.executorsUser[executorName]
-		if parsed {
-			continue
 		}
 
 		varsFromInput, err := getUserExecutorInputYML(ctx, btes)
