@@ -21,6 +21,9 @@ type dumpFile struct {
 // RunTestStep executes a venom testcase is a venom context
 func (v *Venom) RunTestStep(ctx context.Context, e ExecutorRunner, tc *TestCase, tsResult *TestStepResult, stepNumber int, rangedIndex int, step TestStep, vars *H) (interface{}, H) {
 	ctx = context.WithValue(ctx, ContextKey("executor"), e.Name())
+	if tc.IsExecutor {
+		v.SetIndentation(3)
+	}
 	var assertRes AssertionsApplied
 	var result interface{}
 	newVars := H{}
@@ -98,6 +101,7 @@ func (v *Venom) RunTestStep(ctx context.Context, e ExecutorRunner, tc *TestCase,
 				}
 			}
 			Info(ctx, info)
+			tsResult.ComputedInfo = append(tsResult.ComputedInfo, info)
 			v.Println("\t  %s%s %s", "\t  ", Cyan("[info]"), Cyan(info))
 		}
 
@@ -147,6 +151,7 @@ func (v *Venom) RunTestStep(ctx context.Context, e ExecutorRunner, tc *TestCase,
 
 func (v *Venom) runTestStepExecutor(ctx context.Context, e ExecutorRunner, tc *TestCase, testStepResult *TestStepResult, step TestStep, vars *H) (interface{}, error) {
 	ctx = context.WithValue(ctx, ContextKey("executor"), e.Name())
+
 	if e.Timeout() == 0 {
 		if e.Type() == "user" {
 			return v.RunUserExecutor(ctx, e, tc, testStepResult, step, vars)
@@ -156,8 +161,6 @@ func (v *Venom) runTestStepExecutor(ctx context.Context, e ExecutorRunner, tc *T
 
 	ctxTimeout, cancel := context.WithTimeout(ctx, time.Duration(e.Timeout())*time.Second)
 	defer cancel()
-
-	v.Println("%v", step)
 	ch := make(chan interface{})
 	cherr := make(chan error)
 	go func(e ExecutorRunner, step TestStep) {
@@ -177,13 +180,10 @@ func (v *Venom) runTestStepExecutor(ctx context.Context, e ExecutorRunner, tc *T
 
 	select {
 	case err := <-cherr:
-		v.Println("\n\t\t • %v %s", e.Name(), Red(StatusFail))
 		return nil, err
 	case result := <-ch:
-		v.Println("\n\t\t • %v %s", e.Name(), Green(StatusPass))
 		return result, nil
 	case <-ctxTimeout.Done():
-		v.Println("\n\t\t • %v %s", e.Name(), Yellow("OUT OF TIME"))
 		return nil, fmt.Errorf("Timeout after %d second(s)", e.Timeout())
 	}
 }

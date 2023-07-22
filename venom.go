@@ -64,27 +64,27 @@ type Venom struct {
 	executorsPlugin   map[string]Executor
 	executorsUser     map[string]Executor
 	executorFileCache map[string][]byte
-
-	Tests            Tests
-	variables        map[string]interface{}
-	InitialVariables *map[string]string
-
-	LibDir        string
-	OutputFormat  string
-	OutputDir     string
-	StopOnFailure bool
-	HtmlReport    bool
-	Verbose       int
+	Tests             Tests
+	variables         map[string]interface{}
+	InitialVariables  *map[string]string
+	IndentationLevel  int
+	indentation       string
+	LibDir            string
+	OutputFormat      string
+	OutputDir         string
+	StopOnFailure     bool
+	HtmlReport        bool
+	Verbose           int
 }
 
 var trace = color.New(color.Attribute(90)).SprintFunc()
 
 func (v *Venom) Print(format string, a ...interface{}) {
-	v.PrintFunc(format, a...) // nolint
+	v.PrintFunc(v.indentation+format, a...) // nolint
 }
 
 func (v *Venom) Println(format string, a ...interface{}) {
-	v.PrintFunc(format+"\n", a...) // nolint
+	v.PrintFunc(v.indentation+format+"\n", a...) // nolint
 }
 
 func (v *Venom) PrintlnTrace(s string) {
@@ -92,7 +92,23 @@ func (v *Venom) PrintlnTrace(s string) {
 }
 
 func (v *Venom) PrintlnIndentedTrace(s string, indent string) {
-	v.Println("\t  %s%s %s", indent, trace("[trac]"), trace(s)) // nolint
+	v.Println("%s\t  %s%s %s", v.indentation, indent, trace("[trac]"), trace(s)) // nolint
+}
+
+func (v *Venom) SetIndentation(val int) {
+	if val < 0 {
+		val = 0
+	}
+	v.IndentationLevel = val
+	v.indentation = v.GetIndentationAsString()
+}
+
+func (v *Venom) GetIndentationAsString() string {
+	indentation := "\t"
+	for i := 0; i < v.IndentationLevel; i++ {
+		indentation += " "
+	}
+	return indentation
 }
 
 func (v *Venom) AddVariables(variables map[string]interface{}) {

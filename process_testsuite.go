@@ -195,6 +195,6 @@ func (v *Venom) parseTestCases(ctx context.Context, ts *TestSuite) ([]string, []
 			}
 		}
 	}
-	Info(ctx, "extracted vars from testcase %s ", extractsVars)
+
 	return vars, extractsVars, nil
 }

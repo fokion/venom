@@ -131,6 +131,7 @@ func (v *Venom) parseTestCase(ctx context.Context, tc *TestCase) ([]string, []st
 
 func (v *Venom) runTestCase(ctx context.Context, tc *TestCase, testSuiteVariables *H) H {
 	ctx = context.WithValue(ctx, ContextKey("testcase"), tc.Name)
+	v.SetIndentation(2)
 	Info(ctx, "Starting testcase")
 	// ##### RUN Test Steps Here
 	computedVars := v.runTestSteps(ctx, tc, testSuiteVariables)

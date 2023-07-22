@@ -199,5 +199,6 @@ func (v *Venom) Process(ctx context.Context) error {
 	v.Tests.End = time.Now()
 	v.Tests.Duration = v.Tests.End.Sub(v.Tests.Start).Seconds()
 	Debug(ctx, "final status: %s", v.Tests.Status)
+
 	return nil
 }
