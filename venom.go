@@ -9,7 +9,6 @@ import (
 	"github.com/fatih/color"
 	"github.com/pkg/errors"
 	"github.com/rockbears/yaml"
-	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cast"
 	"io"
 	"os"
@@ -241,7 +240,6 @@ func (v *Venom) registerUserExecutors(ctx context.Context, name string, vars map
 	}
 
 	for _, f := range executorsPath {
-		log.Info("Reading ", f)
 		btes, ok := v.executorFileCache[f]
 		if !ok {
 			btes, err = os.ReadFile(f)
@@ -283,10 +281,8 @@ func (v *Venom) registerUserExecutors(ctx context.Context, name string, vars map
 
 		ux := UserExecutor{Filename: f}
 		if err := yaml.Unmarshal(btes, &ux); err != nil {
-			return errors.Wrapf(err, "unable to parse file %q with content %v", f, string(btes))
+			return errors.Wrapf(err, "unable to parse file %q", f)
 		}
-
-		log.Debugf("User executor %q revolved with content %v", f, btes)
 
 		for k, vr := range varsComputed {
 			ux.Input.Add(k, vr)

@@ -409,20 +409,20 @@ var Cmd = &cobra.Command{
 
 		if err := v.Process(context.Background()); err != nil {
 			fmt.Fprintf(os.Stderr, "%v\n", err)
-			venom.OSExit(2)
+			v.Exit(2)
 		}
 
 		if err := v.OutputResult(); err != nil {
 			fmt.Fprintf(os.Stderr, "%v\n", err)
-			venom.OSExit(2)
+			v.Exit(2)
 		}
 
 		if v.Tests.Status == venom.StatusPass {
 			fmt.Fprintf(os.Stdout, "final status: %v\n", venom.Green(v.Tests.Status))
-			venom.OSExit(0)
+			v.Exit(0)
 		}
 		fmt.Fprintf(os.Stdout, "final status: %v\n", venom.Red(v.Tests.Status))
-		venom.OSExit(2)
+		v.Exit(2)
 
 		return nil
 	},
