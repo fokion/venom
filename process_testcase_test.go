@@ -56,30 +56,32 @@ func TestInterpolation(t *testing.T) {
 	payload := `
 {
     "assertions": [
-        "result.statuscode MustEqual 200"
+        "result.statuscode MustEqual {{.input.expected_status_code}}"
     ],
     "delay": "{{.input.delay}}",
     "headers": {
         "Authorization": "Bearer {{.input.access_token}}",
-        "Content-Type": "application/json;charset=UTF-8"
+        "Consent": "{{.input.consent_token}}",
+        "Content-Type": "application/json;charset=UTF-8",
+        "psu-corporate-id": "{{.input.psu.corporate_id | default}}",
+        "psu-id": "{{.input.psu.id | default}}",
+        "psu-ip-address": "{{.input.psu.ip | default}}"
     },
     "info": [
-        "GET USERS TRACING : {{.result.headers.interactionId}}"
+        "GET ACCOUNTS TRACING :  {{.result.headers.X-Yapily-Interaction-Id}}"
     ],
     "method": "GET",
+    "name": "Get accounts",
     "retry": "{{.input.retry}}",
     "timeout": "{{.input.timeout}}",
-    "tls_client_cert": '{{.certs.client | default ""}}',
-    "tls_client_key": '{{.certs.key | default ""}}',
-    "tls_root_ca": '{{.certs.rootCa | default ""}}',
+    "tls_client_cert": "{{.certs.client | default}}",
+    "tls_client_key": "{{.certs.key | default}}",
+    "tls_root_ca": "{{.certs.root_ca | default}}",
     "type": "http",
-    "url": "{{.service.url}}/users",
+    "url": "{{.yapily.url}}/accounts",
     "vars": {
-        "first": {
-            "from": "result.bodyjson.bodyjson0.uuid"
-        },
-        "length": {
-            "from": "result.bodyjson.__Len__"
+        "body": {
+            "from": "result.bodyjson.data"
         }
     }
 }

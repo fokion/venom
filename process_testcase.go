@@ -198,6 +198,7 @@ func (v *Venom) runTestSteps(ctx context.Context, tc *TestCase, testCaseVariable
 		}
 
 		for rangedIndex, rangedData := range ranged.Items {
+			stepVars.AddAll(previousStepVars)
 			tc.TestStepResults = append(tc.TestStepResults, TestStepResult{})
 			tsResult := &tc.TestStepResults[len(tc.TestStepResults)-1]
 
@@ -241,6 +242,7 @@ func (v *Venom) runTestSteps(ctx context.Context, tc *TestCase, testCaseVariable
 			for i := 0; i < 10; i++ {
 				payloadBytes, _ := json.Marshal(rawStep)
 				content, err = interpolate.Do(string(payloadBytes), vars)
+				//content, err = interpolate.Do(strings.ReplaceAll(string(payloadBytes), "\\\"", "'"), vars)
 				if err != nil {
 					Error(ctx, "unable to interpolate step: %v", err)
 					failTestCase(tc, err)
@@ -327,9 +329,7 @@ func (v *Venom) runTestSteps(ctx context.Context, tc *TestCase, testCaseVariable
 			} else {
 				tsResult.Start = time.Now()
 				tsResult.Status = StatusRun
-				if v.Verbose >= 1 {
-					v.Print("\n \t\t\t • %v", tsResult.Name)
-				}
+
 				_, vars := v.RunTestStep(ctx, runner, tc, tsResult, stepNumber, rangedIndex, step, &previousStepVars)
 
 				if vars != nil {
@@ -347,14 +347,10 @@ func (v *Venom) runTestSteps(ctx context.Context, tc *TestCase, testCaseVariable
 				}
 
 				if len(tsResult.Errors) > 0 || !tsResult.AssertionsApplied.OK {
-					if v.Verbose >= 1 {
-						v.Println(" %v", Red(StatusFail))
-					}
+
 					tsResult.Status = StatusFail
 				} else {
-					if v.Verbose >= 1 {
-						v.Println(" %v", Green(StatusPass))
-					}
+
 					tsResult.Status = StatusPass
 				}
 
@@ -506,24 +502,37 @@ func parseRanged(ctx context.Context, rawStep []byte, stepVars *H) (Range, error
 	case string:
 		Debug(ctx, "attempting to parse range expression")
 		rawString := ranged.RawContent.(string)
+		vars, err := DumpStringPreserveCase(*stepVars)
+		if err != nil {
+			Warn(ctx, "failed to parse range expression when loading step variables: %v", err)
+			break
+		}
+		for i := range vars {
+			vars[i] = strings.ReplaceAll(vars[i], "\"", "\\\"")
+		}
+		for i := 0; i < 10; i++ {
+			err := error(nil)
+			rawString, err = interpolate.Do(rawString, vars)
+			//content, err = interpolate.Do(strings.ReplaceAll(string(payloadBytes), "\\\"", "'"), vars)
+			if err != nil {
+				Error(ctx, "unable to interpolate step: %v", err)
+				break
+			}
+			if !strings.Contains(rawString, "{{.") {
+				break
+			}
+		}
 		if len(rawString) == 0 {
 			return ranged, fmt.Errorf("range expression has been specified without any data")
 		}
 
 		// Try parsing already templated data
-		err := json.Unmarshal([]byte("{\"range\":"+rawString+"}"), &ranged)
+		err = json.Unmarshal([]byte("{\"range\":"+rawString+"}"), &ranged)
 		// ... or fallback
 		if err != nil {
 			//Try templating and escaping data
 			Debug(ctx, "attempting to template range expression and parse it again")
-			vars, err := DumpStringPreserveCase(stepVars)
-			if err != nil {
-				Warn(ctx, "failed to parse range expression when loading step variables: %v", err)
-				break
-			}
-			for i := range vars {
-				vars[i] = strings.ReplaceAll(vars[i], "\"", "\\\"")
-			}
+
 			content, err := interpolate.Do(string(rawStep), vars)
 			if err != nil {
 				Warn(ctx, "failed to parse range expression when templating variables: %v", err)

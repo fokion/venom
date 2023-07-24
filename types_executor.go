@@ -241,6 +241,7 @@ func (v *Venom) RunUserExecutor(ctx context.Context, runner ExecutorRunner, tcIn
 
 	Debug(ctx, "running user executor %v", ux.Executor)
 	testStepResult.ComputedVars = H{}
+	v.SetIndentation(v.IndentationLevel + 1)
 	newVars := v.runTestSteps(ctx, tc, &vrs)
 	if newVars != nil {
 		testStepResult.ComputedVars.AddAll(newVars)

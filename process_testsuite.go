@@ -70,7 +70,7 @@ func (v *Venom) runTestCases(ctx context.Context, ts *TestSuite, variables *H) {
 	for i := range ts.TestCases {
 		tc := &ts.TestCases[i]
 		tc.IsEvaluated = true
-		v.Print(" \t• %s", tc.Name)
+		v.Println(" \t• %s", tc.Name)
 		var hasFailure bool
 		var hasRanged bool
 		var hasSkipped = len(tc.Skipped) > 0
@@ -121,6 +121,7 @@ func (v *Venom) runTestCases(ctx context.Context, ts *TestSuite, variables *H) {
 				continue
 			}
 		} else {
+			v.Print("status:")
 			if hasFailure {
 				v.Println(" %s", Red(StatusFail))
 			} else if tc.Status == StatusSkip {

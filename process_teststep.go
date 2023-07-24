@@ -21,8 +21,10 @@ type dumpFile struct {
 // RunTestStep executes a venom testcase is a venom context
 func (v *Venom) RunTestStep(ctx context.Context, e ExecutorRunner, tc *TestCase, tsResult *TestStepResult, stepNumber int, rangedIndex int, step TestStep, vars *H) (interface{}, H) {
 	ctx = context.WithValue(ctx, ContextKey("executor"), e.Name())
-	if tc.IsExecutor {
-		v.SetIndentation(3)
+	if !tc.IsExecutor {
+		v.SetIndentation(v.IndentationLevel - 1)
+	} else if v.Verbose >= 1 {
+		v.Println("\n \t\t\t • %v", tsResult.Name)
 	}
 	var assertRes AssertionsApplied
 	var result interface{}
@@ -102,7 +104,11 @@ func (v *Venom) RunTestStep(ctx context.Context, e ExecutorRunner, tc *TestCase,
 			}
 			Info(ctx, info)
 			tsResult.ComputedInfo = append(tsResult.ComputedInfo, info)
-			v.Println("\t  %s%s %s", "\t  ", Cyan("[info]"), Cyan(info))
+			if tc.IsExecutor {
+				v.PrintlnTrace("[info]" + Cyan(info))
+			} else {
+				v.Println("\t  %s%s %s", "\t  ", Cyan("[info]"), Cyan(info))
+			}
 		}
 
 		if result == nil {
