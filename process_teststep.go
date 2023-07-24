@@ -112,7 +112,6 @@ func (v *Venom) RunTestStep(ctx context.Context, e ExecutorRunner, tc *TestCase,
 		}
 
 		if result == nil {
-			Debug(ctx, "empty testcase, applying assertions on variables: %v", AllVarsFromCtx(ctx))
 			assertRes = applyAssertions(ctx, AllVarsFromCtx(ctx), *tc, stepNumber, rangedIndex, step, nil)
 		} else {
 			if h, ok := e.(executorWithDefaultAssertions); ok {
