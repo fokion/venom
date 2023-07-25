@@ -164,7 +164,7 @@ func (v *Venom) processSecrets(ctx context.Context, ts *TestSuite, tc *TestCase)
 
 func (v *Venom) runTestSteps(ctx context.Context, tc *TestCase, tsIn *TestStepResult) {
 	if len(tc.Skip) > 0 {
-		failures, err := testConditionalStatement(ctx, tc, tc.Skip, tc.Vars, "skipping testcase %q: %v")
+		failures, err := testConditionalStatement(ctx, tc, tc.Skip, &tc.Vars, "skipping testcase %q: %v")
 		if err != nil {
 			Error(ctx, "unable to evaluate \"skip\" assertions: %v", err)
 			testStepResult := TestStepResult{}
@@ -172,7 +172,8 @@ func (v *Venom) runTestSteps(ctx context.Context, tc *TestCase, tsIn *TestStepRe
 			tc.TestStepResults = append(tc.TestStepResults, testStepResult)
 			return
 		}
-		if len(failures) > 0 {
+		if failures != nil && len(failures) > 0 {
+			Info(ctx, fmt.Sprintf("Skipping test case as there are %v failures", len(failures)))
 			tc.Status = StatusSkip
 			for _, s := range failures {
 				tc.Skipped = append(tc.Skipped, Skipped{Value: s})
@@ -317,7 +318,8 @@ func (v *Venom) runTestSteps(ctx context.Context, tc *TestCase, tsIn *TestStepRe
 			v.setTestStepName(tsResult, e, step, &ranged, &rangedData, rangedIndex, printStepName)
 
 			// ##### RUN Test Step Here
-			skip, err := parseSkip(ctx, tc, tsResult, rawStep, stepNumber)
+			Info(ctx, fmt.Sprintf("Checking skip for test step %v", printStepName))
+			skip, err := parseSkip(ctx, tc, &stepVars, tsResult, rawStep, stepNumber)
 			if err != nil {
 				tsResult.appendError(err)
 				tsResult.Status = StatusFail
@@ -430,7 +432,7 @@ func (v *Venom) printTestStepResult(tc *TestCase, ts *TestStepResult, tsIn *Test
 }
 
 // Parse and format skip conditional
-func parseSkip(ctx context.Context, tc *TestCase, ts *TestStepResult, rawStep []byte, stepNumber int) (bool, error) {
+func parseSkip(ctx context.Context, tc *TestCase, vars *H, ts *TestStepResult, rawStep []byte, stepNumber int) (bool, error) {
 	// Load "skip" attribute from step
 	var assertions struct {
 		Skip []string `yaml:"skip"`
@@ -441,12 +443,14 @@ func parseSkip(ctx context.Context, tc *TestCase, ts *TestStepResult, rawStep []
 
 	// Evaluate skip assertions
 	if len(assertions.Skip) > 0 {
-		failures, err := testConditionalStatement(ctx, tc, assertions.Skip, tc.computedVars, fmt.Sprintf("skipping testcase %%q step #%d: %%v", stepNumber))
+		failures, err := testConditionalStatement(ctx, tc, assertions.Skip, vars, fmt.Sprintf("skipping testcase %%q step #%d: %%v", stepNumber))
 		if err != nil {
 			Error(ctx, "unable to evaluate \"skip\" assertions: %v", err)
 			return false, err
 		}
+
 		if len(failures) > 0 {
+			Info(ctx, fmt.Sprintf("Skip as there are %v failures", len(failures)))
 			for _, s := range failures {
 				ts.Skipped = append(ts.Skipped, Skipped{Value: s})
 				Warn(ctx, s)
