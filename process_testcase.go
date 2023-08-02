@@ -196,13 +196,21 @@ func (v *Venom) runTestSteps(ctx context.Context, tc *TestCase, testCaseVariable
 			failTestCase(tc, err)
 			return nil
 		}
+		rangedEnabled := false
+		items := []RangeData{}
+		if ranged != nil {
+			items = ranged.Items
+			rangedEnabled = ranged.Enabled
+		} else {
+			items = append(items, RangeData{})
+		}
 
-		for rangedIndex, rangedData := range ranged.Items {
+		for rangedIndex, rangedData := range items {
 			stepVars.AddAll(previousStepVars)
 			tc.TestStepResults = append(tc.TestStepResults, TestStepResult{})
 			tsResult := &tc.TestStepResults[len(tc.TestStepResults)-1]
 
-			if ranged.Enabled {
+			if rangedEnabled {
 				Debug(ctx, "processing range index: %d", rangedIndex)
 				stepVars.Add("index", rangedIndex)
 				stepVars.Add("key", rangedData.Key)
@@ -253,7 +261,7 @@ func (v *Venom) runTestSteps(ctx context.Context, tc *TestCase, testCaseVariable
 				}
 			}
 
-			if ranged.Enabled {
+			if rangedEnabled {
 				Info(ctx, "Step #%d-%d content is: %s", stepNumber, rangedIndex, content)
 			} else {
 				Info(ctx, "Step #%d content is: %s", stepNumber, content)
@@ -284,7 +292,7 @@ func (v *Venom) runTestSteps(ctx context.Context, tc *TestCase, testCaseVariable
 
 			tsResult.Number = stepNumber
 			tsResult.RangedIndex = rangedIndex
-			tsResult.RangedEnable = ranged.Enabled
+			tsResult.RangedEnable = rangedEnabled
 			tsResult.InputVars = vars
 
 			tc.testSteps = append(tc.testSteps, step)
@@ -316,7 +324,7 @@ func (v *Venom) runTestSteps(ctx context.Context, tc *TestCase, testCaseVariable
 			}
 
 			//printStepName := v.Verbose >= 1
-			v.setTestStepName(tsResult, runner, step, &ranged, &rangedData, rangedIndex)
+			v.setTestStepName(tsResult, runner, step, ranged, &rangedData, rangedIndex)
 
 			// ##### RUN Test Step Here
 			Info(ctx, fmt.Sprintf("Checking skip for test step %v", tsResult.Name))
@@ -404,7 +412,7 @@ func (v *Venom) setTestStepName(ts *TestStepResult, e ExecutorRunner, step TestS
 			name = value
 		}
 	}
-	if ranged.Enabled {
+	if ranged != nil && ranged.Enabled {
 		if rangedIndex == 0 {
 			v.Println("\n")
 		}
@@ -414,8 +422,8 @@ func (v *Venom) setTestStepName(ts *TestStepResult, e ExecutorRunner, step TestS
 }
 
 // Print a single step result (if verbosity is enabled)
-func (v *Venom) printTestStepResult(tc *TestCase, ts *TestStepResult, ranged Range, stepNumber int, mustAssertionFailed bool) {
-	if ranged.Enabled || v.Verbose >= 1 {
+func (v *Venom) printTestStepResult(tc *TestCase, ts *TestStepResult, ranged *Range, stepNumber int, mustAssertionFailed bool) {
+	if ranged != nil && ranged.Enabled || v.Verbose >= 1 {
 		if !tc.IsExecutor { //Else print step status
 			if len(ts.Errors) > 0 {
 				v.Println(" %s", Red(StatusFail))
@@ -483,20 +491,19 @@ func parseSkip(ctx context.Context, tc *TestCase, vars *H, ts *TestStepResult, r
 }
 
 // Parse and format range data to allow iterations over user data
-func parseRanged(ctx context.Context, rawStep []byte, stepVars *H) (Range, error) {
+func parseRanged(ctx context.Context, rawStep []byte, stepVars *H) (*Range, error) {
 
 	//Load "range" attribute and perform actions depending on its typing
 	var ranged Range
 	if err := json.Unmarshal(rawStep, &ranged); err != nil {
-		return ranged, fmt.Errorf("unable to parse range expression: %v", err)
+		return &ranged, fmt.Errorf("unable to parse range expression: %v", err)
 	}
 
 	switch ranged.RawContent.(type) {
 
 	//Nil means this is not a ranged data, append an empty item to force at least one iteration and exit
 	case nil:
-		ranged.Items = append(ranged.Items, RangeData{})
-		return ranged, nil
+		return nil, nil
 
 	//String needs to be parsed and possibly templated
 	case string:
@@ -523,7 +530,7 @@ func parseRanged(ctx context.Context, rawStep []byte, stepVars *H) (Range, error
 			}
 		}
 		if len(rawString) == 0 {
-			return ranged, fmt.Errorf("range expression has been specified without any data")
+			return &ranged, fmt.Errorf("range expression has been specified without any data")
 		}
 
 		// Try parsing already templated data
@@ -551,7 +558,7 @@ func parseRanged(ctx context.Context, rawStep []byte, stepVars *H) (Range, error
 				err := json.Unmarshal([]byte("{\"range\":"+rawString+"}"), &ranged)
 				if err != nil {
 					Warn(ctx, "failed to parse range expression when parsing raw string into data: %v", err)
-					return ranged, fmt.Errorf("unable to parse range expression: unable to transform string data into a supported range expression type")
+					return &ranged, fmt.Errorf("unable to parse range expression: unable to transform string data into a supported range expression type")
 				}
 			}
 		}
@@ -586,12 +593,12 @@ func parseRanged(ctx context.Context, rawStep []byte, stepVars *H) (Range, error
 
 	//Unsupported data format
 	default:
-		return ranged, fmt.Errorf("\"range\" was provided an unsupported type %T", t)
+		return &ranged, fmt.Errorf("\"range\" was provided an unsupported type %T", t)
 	}
 
 	ranged.Enabled = true
 	ranged.RawContent = nil
-	return ranged, nil
+	return &ranged, nil
 }
 
 func processVariableAssignments(ctx context.Context, tcName string, tcVars *H, rawStep json.RawMessage) (H, bool, error) {
