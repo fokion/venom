@@ -296,7 +296,7 @@ func (v *Venom) runTestSteps(ctx context.Context, tc *TestCase, tsIn *TestStepRe
 			tsResult.Number = stepNumber
 			tsResult.RangedIndex = rangedIndex
 			tsResult.RangedEnable = ranged.Enabled
-			tsResult.InputVars = vars
+			tsResult.InputVars = stepVars
 
 			tc.testSteps = append(tc.testSteps, step)
 			var e ExecutorRunner
@@ -680,7 +680,7 @@ func processVariableAssignments(ctx context.Context, tcName string, tcVars *H, r
 			if !has {
 
 				if assignment.Default == nil {
-					err := fmt.Errorf("%s reference not found in %s", assignment.From, strings.Join(tcVarsKeys, "\n"))
+					err := fmt.Errorf("%s reference not found ", assignment.From)
 					Error(ctx, "%v", err)
 					return nil, true, err
 				}
