@@ -127,3 +127,18 @@ func TestRunCmd(t *testing.T) {
 	err := rootCmd.Execute()
 	assert.NoError(t, err)
 }
+
+func TestExecYMLTestCase(t *testing.T) {
+	var validArgs []string
+
+	validArgs = append(validArgs, "run", "../../../tests/exec.yml")
+
+	rootCmd := &cobra.Command{
+		Use:   "venom",
+		Short: "Venom aim to create, manage and run your integration tests with efficiency",
+	}
+	rootCmd.SetArgs(validArgs)
+	rootCmd.AddCommand(Cmd)
+	err := rootCmd.Execute()
+	assert.NoError(t, err)
+}
