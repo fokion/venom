@@ -10,7 +10,6 @@ import (
 	"github.com/gosimple/slug"
 	"github.com/ovh/cds/sdk/interpolate"
 	"github.com/pkg/errors"
-	"github.com/rockbears/yaml"
 )
 
 // Executor execute a testStep.
@@ -238,10 +237,12 @@ func (v *Venom) RunUserExecutor(ctx context.Context, runner ExecutorRunner, tcIn
 				inputOnlyVrs.AddWithPrefix("input", k, va)
 			}
 		} else {
+
 			inputOnlyVrs.Add(k, va)
 			vrs.Add(k, va)
 		}
 	}
+
 	// reload the user executor with the interpolated vars
 	_, exe, err := v.GetExecutorRunner(ctx, step, vrs)
 	if err != nil {
@@ -317,8 +318,26 @@ func (v *Venom) RunUserExecutor(ctx context.Context, runner ExecutorRunner, tcIn
 	}
 
 	var outputResult interface{}
-	if err := yaml.Unmarshal([]byte(outputS), &outputResult); err != nil {
-		return nil, errors.Wrapf(err, "unable to unmarshal")
+	if err := json.Unmarshal([]byte(outputS), &outputResult); err != nil {
+		alternativeResult := H{}
+		outputEntries := map[string]interface{}{}
+		if err := json.Unmarshal([]byte(ux.Output), &outputEntries); err != nil {
+			Warn(ctx, "Failing unmarshalling")
+		}
+		Warn(ctx, "Trying to unmarshal it manually")
+		for k, val := range outputEntries {
+			requiredKey := strings.ReplaceAll(fmt.Sprintf("%s", val), "{{.", "")
+			requiredKey = strings.ReplaceAll(requiredKey, "}}", "")
+			actualVal, ok := computedVars[requiredKey]
+			if ok {
+				alternativeResult.Add(strings.Trim(fmt.Sprintf("%s", k), " "), actualVal)
+			} else {
+				Error(ctx, "could not find the key %s in the computed variables for %k", requiredKey, k)
+				return nil, errors.Wrapf(err, "unable to unmarshal")
+			}
+		}
+
+		outputResult = alternativeResult
 	}
 
 	if len(tsIn.Errors) > 0 {

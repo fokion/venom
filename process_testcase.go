@@ -341,6 +341,7 @@ func (v *Venom) runTestSteps(ctx context.Context, tc *TestCase, tsIn *TestStepRe
 				tsResult.Status = StatusRun
 				_, vars := v.RunTestStep(ctx, e, tc, tsResult, stepNumber, rangedIndex, step, &previousStepVars)
 				if vars != nil {
+					previousStepVars.AddAllWithPrefix("result", vars)
 					previousStepVars.AddAll(vars)
 					if tsResult.ComputedVars == nil {
 						tsResult.ComputedVars = H{}
@@ -632,6 +633,7 @@ func processVariableAssignments(ctx context.Context, tcName string, tcVars *H, r
 	}
 
 	if len(stepAssignment.Assignments) == 0 {
+		Debug(ctx, "%s does not have any assignments", tcName)
 		return nil, false, nil
 	}
 

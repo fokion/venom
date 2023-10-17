@@ -38,12 +38,12 @@ func (h *H) Add(k string, v interface{}) {
 }
 
 func (h *H) AddWithPrefix(p, k string, v interface{}) {
-	(*h)[p+"."+k] = v
+	(*h)[p+"."+strings.Trim(fmt.Sprintf("%s", k), " ")] = v
 }
 
 func (h *H) AddAll(h2 H) {
 	for k, v := range h2 {
-		h.Add(k, v)
+		h.Add(strings.Trim(fmt.Sprintf("%s", k), " "), v)
 	}
 }
 
